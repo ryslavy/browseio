@@ -540,7 +540,7 @@ export default function MovieDetails() {
                     sources: [
                       {
                         src: playingUrl,
-                        type: 'video/mp4'
+                        type: playingUrl?.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4'
                       }
                     ]
                   }), [playingUrl])}
