@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
@@ -406,7 +407,7 @@ export default function MovieDetails() {
         )}
       </div>
 
-      {playingUrl && (
+      {playingUrl && typeof document !== 'undefined' && createPortal(
         <div 
           className="fade-in" 
           style={{ 
@@ -416,7 +417,7 @@ export default function MovieDetails() {
             width: '100vw', 
             height: '100vh', 
             backgroundColor: '#000', 
-            zIndex: 9999,
+            zIndex: 999999,
             display: 'flex',
             flexDirection: 'column'
           }}
@@ -481,7 +482,8 @@ export default function MovieDetails() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

@@ -14,16 +14,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   const playerRef = useRef<any>(null);
 
   useEffect(() => {
-    // Make sure Video.js player is only initialized once
     if (!playerRef.current && videoRef.current) {
-      const videoElement = document.createElement("video-js");
+      const videoElement = document.createElement("video");
+      videoElement.classList.add('video-js');
       videoElement.classList.add('vjs-big-play-centered');
-      videoElement.classList.add('vjs-premium-theme'); // Custom theme class
+      videoElement.classList.add('vjs-premium-theme');
       videoRef.current.appendChild(videoElement);
 
       const player = playerRef.current = videojs(videoElement, options, () => {
         videojs.log('player is ready');
-        onReady && onReady(player);
+        if (onReady) onReady(player);
       });
     } else if (playerRef.current) {
       const player = playerRef.current;
@@ -32,7 +32,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
     }
   }, [options, videoRef]);
 
-  // Dispose the Video.js player when the functional component unmounts
   useEffect(() => {
     const player = playerRef.current;
     return () => {
@@ -41,7 +40,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         playerRef.current = null;
       }
     };
-  }, [playerRef]);
+  }, []);
 
   return (
     <div data-vjs-player style={{ width: '100%', height: '100%', position: 'relative' }}>
