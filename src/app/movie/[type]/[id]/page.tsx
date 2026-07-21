@@ -290,15 +290,12 @@ export default function MovieDetails() {
                         const eps = episodesList.filter(ep => ep.season === s).sort((a, b) => a.episode - b.episode);
                         if (eps.length > 0) setSelectedEpisode(eps[0].episode);
                       }}
+                      className={`glass-pill ${selectedSeason === s ? 'active' : ''}`}
                       style={{
-                        padding: '0.5rem 1rem',
-                        borderRadius: '8px',
-                        border: 'none',
-                        backgroundColor: selectedSeason === s ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)',
-                        color: selectedSeason === s ? '#fff' : 'var(--text-primary)',
+                        padding: '0.6rem 1.2rem',
+                        borderRadius: '9999px',
                         cursor: 'pointer',
-                        fontWeight: selectedSeason === s ? 600 : 400,
-                        transition: 'all 0.2s ease'
+                        fontWeight: selectedSeason === s ? 600 : 500,
                       }}
                     >
                       {s === 0 ? 'Speciály' : `Série ${s}`}
@@ -316,26 +313,23 @@ export default function MovieDetails() {
                       <button
                         key={e.episode}
                         onClick={() => setSelectedEpisode(e.episode)}
+                        className={`glass-pill ${selectedEpisode === e.episode ? 'active' : ''}`}
                         style={{
-                          padding: '0.5rem 0.75rem',
-                          borderRadius: '8px',
-                          border: 'none',
-                          backgroundColor: selectedEpisode === e.episode ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)',
-                          color: selectedEpisode === e.episode ? '#fff' : 'var(--text-primary)',
+                          padding: '0.6rem 1rem',
+                          borderRadius: '16px',
                           cursor: 'pointer',
                           textAlign: 'left',
                           minWidth: '140px',
                           display: 'flex',
                           flexDirection: 'column',
                           gap: '0.2rem',
-                          transition: 'all 0.2s ease'
                         }}
                       >
                         <span style={{ fontWeight: selectedEpisode === e.episode ? 600 : 500 }}>
                           E{e.episode} {e.title && e.title.length < 25 ? `- ${e.title}` : ''}
                         </span>
                         {releaseDate && (
-                          <span style={{ fontSize: '0.75rem', color: selectedEpisode === e.episode ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)' }}>
+                          <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
                             📅 {releaseDate}
                           </span>
                         )}
@@ -365,16 +359,13 @@ export default function MovieDetails() {
               <button
                 key={src.id}
                 onClick={() => setSourceFilter(src.id)}
+                className={`glass-pill ${sourceFilter === src.id ? 'active' : ''}`}
                 style={{
-                  padding: '0.4rem 0.9rem',
+                  padding: '0.5rem 1rem',
                   fontSize: '0.85rem',
-                  borderRadius: '20px',
+                  borderRadius: '9999px',
                   cursor: 'pointer',
                   fontWeight: 500,
-                  transition: 'all 0.2s',
-                  backgroundColor: sourceFilter === src.id ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.05)',
-                  color: sourceFilter === src.id ? '#fff' : 'var(--text-secondary)',
-                  border: sourceFilter === src.id ? '1px solid var(--accent-color)' : '1px solid rgba(255, 255, 255, 0.1)'
                 }}
               >
                 {src.label}

@@ -82,14 +82,15 @@ a:hover {
 
 /* Apple Liquid Glass Utility */
 .glass-panel {
-  background: var(--bg-glass);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--border-color);
+  background: rgba(20, 20, 22, 0.3); /* highly transparent to show blur */
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.15); /* inner top highlight */
   border-radius: var(--border-radius);
   box-shadow: 
-    0 16px 40px rgba(0, 0, 0, 0.4),
-    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+    0 24px 48px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   transition: transform var(--transition-speed), background var(--transition-speed);
 }
 
@@ -125,7 +126,7 @@ p {
 .gap-4 { gap: 1rem; }
 .gap-2 { gap: 0.5rem; }
 
-/* Apple-style Buttons */
+/* Apple-style Glass Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -139,33 +140,65 @@ p {
   font-family: var(--font-family);
   font-size: 0.95rem;
   letter-spacing: 0.01em;
+  position: relative;
+  overflow: hidden;
 }
 
 .btn-primary {
-  background-color: var(--accent-color);
+  background: rgba(10, 132, 255, 0.75);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(10, 132, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 24px rgba(10, 132, 255, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 .btn-primary:hover {
-  background-color: var(--accent-hover);
-  transform: scale(1.02);
-  box-shadow: 0 6px 20px rgba(10, 132, 255, 0.6);
+  background: rgba(10, 132, 255, 0.9);
+  transform: scale(1.03);
+  box-shadow: 0 12px 32px rgba(10, 132, 255, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.4);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
   color: var(--text-primary);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2), inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.25);
-  transform: scale(1.02);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: scale(1.03);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.05);
+  transition: all var(--transition-speed);
+}
+
+.glass-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.glass-pill.active {
+  background: rgba(10, 132, 255, 0.3);
+  border-color: rgba(10, 132, 255, 0.5);
+  border-top: 1px solid rgba(10, 132, 255, 0.7);
+  box-shadow: 0 8px 24px rgba(10, 132, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 /* Apple-style Forms */
