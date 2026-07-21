@@ -1,65 +1,306 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { getCatalog, searchCinemeta, MetaItem } from '@/lib/cinemeta';
+import { filterCatalogItems, sortCatalogItems, SortMode } from '@/lib/catalog-sorter';
+import { CatalogHeader } from '@/components/catalog/CatalogHeader';
+import { FilterBar } from '@/components/catalog/FilterBar';
+import { SortDropdown } from '@/components/catalog/SortDropdown';
+import { MovieGrid } from '@/components/catalog/MovieGrid';
+
+const MOVIE_GENRES = [
+  'top',
+  'Action',
+  'Adventure',
+  'Animation',
+  'Biography',
+  'Comedy',
+  'Crime',
+  'Documentary',
+  'Drama',
+  'Family',
+  'Fantasy',
+  'History',
+  'Horror',
+  'Mystery',
+  'Romance',
+  'Sci-Fi',
+  'Sport',
+  'Thriller',
+  'War',
+  'Western',
+];
+
+const SERIES_GENRES = [
+  'top',
+  'Action',
+  'Adventure',
+  'Animation',
+  'Biography',
+  'Comedy',
+  'Crime',
+  'Documentary',
+  'Drama',
+  'Family',
+  'Fantasy',
+  'History',
+  'Horror',
+  'Mystery',
+  'Romance',
+  'Sci-Fi',
+  'Sport',
+  'Thriller',
+  'War',
+  'Western',
+  'Reality-TV',
+];
+
+function CatalogContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // URL State derivation
+  const typeParam = (searchParams.get('type') === 'series' ? 'series' : 'movie') as 'movie' | 'series';
+  const genreParam = searchParams.get('genre') || 'top';
+  const sortParam = (searchParams.get('sort') as SortMode) || 'popularity';
+  const qParam = searchParams.get('q') || '';
+
+  const [rawMovies, setRawMovies] = useState<MetaItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const fetchReqId = useRef(0);
+
+  // URL state synchronization helper
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | undefined>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([key, val]) => {
+        if (
+          val === undefined ||
+          val === '' ||
+          (key === 'genre' && val === 'top') ||
+          (key === 'type' && val === 'movie') ||
+          (key === 'sort' && val === 'popularity')
+        ) {
+          params.delete(key);
+        } else {
+          params.set(key, val);
+        }
+      });
+      const query = params.toString();
+      router.push(query ? `${pathname}?${query}` : pathname);
+    },
+    [searchParams, router, pathname]
+  );
+
+  const currentGenres = typeParam === 'movie' ? MOVIE_GENRES : SERIES_GENRES;
+
+  // Primary Data Fetching Effect with Candidate Pool Pre-fetching
+  useEffect(() => {
+    const reqId = ++fetchReqId.current;
+    let isCancelled = false;
+
+    const loadData = async () => {
+      setLoading(true);
+      setHasMore(true);
+
+      // Case 1: Search query active
+      if (qParam.trim()) {
+        const results = await searchCinemeta(qParam.trim(), typeParam);
+        if (!isCancelled && reqId === fetchReqId.current) {
+          setRawMovies(results);
+          setHasMore(false);
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Case 2: Custom sorting active -> Pre-fetch candidate pool up to 50 items
+      if (sortParam !== 'popularity') {
+        let pool: MetaItem[] = [];
+        const existingIds = new Set<string>();
+        let currentSkip = 0;
+        let canFetchMore = true;
+
+        while (pool.length < 50 && canFetchMore && !isCancelled) {
+          const batch = await getCatalog(typeParam, genreParam, currentSkip);
+          if (isCancelled || reqId !== fetchReqId.current) return;
+
+          if (!batch || batch.length === 0) {
+            canFetchMore = false;
+            break;
+          }
+
+          const newItems = batch.filter((m) => !existingIds.has(m.id));
+          if (newItems.length === 0) {
+            canFetchMore = false;
+            break;
+          }
+
+          newItems.forEach((m) => existingIds.add(m.id));
+          pool = [...pool, ...newItems];
+          currentSkip += batch.length;
+
+          if (batch.length < 10) {
+            canFetchMore = false;
+          }
+        }
+
+        if (!isCancelled && reqId === fetchReqId.current) {
+          setRawMovies(pool);
+          setHasMore(canFetchMore);
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Case 3: Default popularity sorting -> Load initial 1 page
+      const initialBatch = await getCatalog(typeParam, genreParam, 0);
+      if (!isCancelled && reqId === fetchReqId.current) {
+        setRawMovies(initialBatch);
+        setHasMore(initialBatch.length >= 10);
+        setLoading(false);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [typeParam, genreParam, qParam, sortParam]);
+
+  // Infinite Scroll Pagination Handler
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore || !hasMore || qParam) return;
+    setLoadingMore(true);
+
+    const nextSkip = rawMovies.length;
+    const batch = await getCatalog(typeParam, genreParam, nextSkip);
+
+    if (!batch || batch.length === 0) {
+      setHasMore(false);
+      setLoadingMore(false);
+      return;
+    }
+
+    setRawMovies((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const newUnique = batch.filter((m) => !existingIds.has(m.id));
+      if (newUnique.length === 0 || batch.length < 10) {
+        setHasMore(false);
+      }
+      return [...prev, ...newUnique];
+    });
+
+    setLoadingMore(false);
+  }, [loading, loadingMore, hasMore, qParam, rawMovies.length, typeParam, genreParam]);
+
+  // Intersection Observer setup for Infinite Scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loading && !loadingMore && hasMore && !qParam) {
+          loadMore();
+        }
+      },
+      { rootMargin: '300px' }
+    );
+
+    observer.observe(sentinel);
+
+    return () => observer.disconnect();
+  }, [loading, loadingMore, hasMore, qParam, loadMore]);
+
+  // Derived Filtered & Sorted Movie List
+  const displayedMovies = useMemo(() => {
+    const filtered = filterCatalogItems(rawMovies, {
+      type: typeParam,
+      genre: qParam ? undefined : genreParam,
+      searchQuery: undefined,
+    });
+    return sortCatalogItems(filtered, sortParam);
+  }, [rawMovies, typeParam, genreParam, qParam, sortParam]);
+
+  // UI Change Handlers
+  const handleTypeChange = (newType: 'movie' | 'series') => {
+    updateUrlParams({ type: newType, genre: undefined, q: undefined });
+  };
+
+  const handleGenreChange = (newGenre: string) => {
+    updateUrlParams({ genre: newGenre });
+  };
+
+  const handleSortChange = (newSort: SortMode) => {
+    updateUrlParams({ sort: newSort });
+  };
+
+  const handleSearchSubmit = (newQuery: string) => {
+    updateUrlParams({ q: newQuery });
+  };
+
+  return (
+    <div className="fade-in">
+      <CatalogHeader type={typeParam} onTypeChange={handleTypeChange} />
+
+      <FilterBar
+        currentGenre={genreParam}
+        genres={currentGenres}
+        searchQuery={qParam}
+        onGenreChange={handleGenreChange}
+        onSearchSubmit={handleSearchSubmit}
+        type={typeParam}
+      />
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1.5rem',
+          flexWrap: 'wrap',
+          gap: '1rem',
+        }}
+      >
+        <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: 700 }}>
+          {qParam
+            ? `Výsledky vyhledávání pro "${qParam}"`
+            : `${genreParam === 'top' ? 'Populární' : genreParam} ${typeParam === 'movie' ? 'filmy' : 'seriály'}`}
+        </h2>
+
+        <SortDropdown currentSort={sortParam} onSortChange={handleSortChange} />
+      </div>
+
+      <MovieGrid movies={displayedMovies} defaultType={typeParam} loading={loading} />
+
+      <div
+        ref={sentinelRef}
+        style={{ height: '40px', margin: '2rem 0', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+      >
+        {loadingMore && <div className="spinner" style={{ width: '30px', height: '30px' }}></div>}
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <Suspense
+      fallback={
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
+          <div className="spinner"></div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      }
+    >
+      <CatalogContent />
+    </Suspense>
   );
 }
