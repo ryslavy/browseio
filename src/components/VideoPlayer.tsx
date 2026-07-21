@@ -16,6 +16,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
   useEffect(() => {
     if (!playerRef.current && videoRef.current) {
       const videoElement = document.createElement("video");
+      videoElement.setAttribute('controls', 'true');
       videoElement.classList.add('video-js');
       videoElement.classList.add('vjs-big-play-centered');
       videoElement.classList.add('vjs-premium-theme');
