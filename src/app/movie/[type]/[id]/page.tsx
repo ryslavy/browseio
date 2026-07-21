@@ -483,21 +483,28 @@ export default function MovieDetails() {
           }}>
             <button 
               onClick={() => { setPlayingUrl(null); setPlayingTitle(''); }}
-              className="btn btn-secondary" 
+              className="glass-pill" 
               style={{ 
-                backgroundColor: 'rgba(0,0,0,0.6)', 
-                backdropFilter: 'blur(12px)', 
-                border: '1px solid rgba(255,255,255,0.2)', 
+                backgroundColor: 'rgba(25, 25, 30, 0.45)', 
+                backdropFilter: 'blur(24px) saturate(200%)', 
+                border: '1px solid rgba(255,255,255,0.15)', 
+                borderTop: '1px solid rgba(255,255,255,0.3)',
                 color: '#fff',
-                fontSize: '0.85rem',
-                padding: '0.4rem 0.9rem',
+                fontSize: '1rem',
+                fontWeight: 600,
+                padding: '0.6rem 1.4rem',
+                borderRadius: '9999px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
               }}
             >
-              ⬅ Zpět
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              Zpět
             </button>
           </div>
 

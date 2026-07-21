@@ -52,6 +52,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
           width: 100% !important;
           height: 100% !important;
           font-family: 'Inter', sans-serif;
+          font-size: 16px !important; /* Zvětšení celého UI přehrávače */
         }
         
         .vjs-premium-theme .vjs-big-play-button {
