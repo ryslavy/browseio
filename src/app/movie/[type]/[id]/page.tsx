@@ -306,7 +306,7 @@ export default function MovieDetails() {
 
               <div>
                 <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1.1rem', color: 'var(--text-secondary)' }}>Epizody</h3>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', maxHeight: '300px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', maxHeight: '320px', overflowY: 'auto', padding: '0.5rem', margin: '-0.5rem' }}>
                   {availableEpisodes.map(e => {
                     const releaseDate = e.released ? new Date(e.released).toLocaleDateString('cs-CZ') : '';
                     return (
