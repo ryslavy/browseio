@@ -2,8 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
 import { getTorrentioSources } from '@/lib/torrentio';
+
+const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), { ssr: false });
 import { getStreams as getHellspyStreams } from '@/lib/hellspy-scraper';
 
 interface MediaSource {
@@ -29,6 +32,8 @@ export default function MovieDetails() {
   const [fetchingStreams, setFetchingStreams] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all'); // all, Torrentio, SKTOnline, SKTorrent, Hellspy
   const [posterError, setPosterError] = useState(false);
+  const [playingUrl, setPlayingUrl] = useState<string | null>(null);
+  const [playingTitle, setPlayingTitle] = useState<string>('');
 
   // For series
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
@@ -198,7 +203,8 @@ export default function MovieDetails() {
       if (mode === 'potplayer') {
         await playInPotPlayer(url);
       } else {
-        router.push(`/player?url=${encodeURIComponent(url)}&${baseParams}`);
+        setPlayingUrl(url);
+        setPlayingTitle(displayTitle);
       }
       return;
     }
@@ -399,6 +405,85 @@ export default function MovieDetails() {
           </div>
         )}
       </div>
+
+      {playingUrl && (
+        <div 
+          className="fade-in" 
+          style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            width: '100vw', 
+            height: '100vh', 
+            backgroundColor: '#000', 
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          {/* Floating Back Arrow Button */}
+          <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 100, pointerEvents: 'auto' }}>
+            <button 
+              onClick={() => { setPlayingUrl(null); setPlayingTitle(''); }}
+              className="btn btn-secondary" 
+              style={{ 
+                backgroundColor: 'rgba(0,0,0,0.6)', 
+                backdropFilter: 'blur(12px)', 
+                border: '1px solid rgba(255,255,255,0.2)', 
+                color: '#fff',
+                fontSize: '0.85rem',
+                padding: '0.4rem 0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer'
+              }}
+            >
+              ⬅ Zpět k filmu
+            </button>
+          </div>
+
+          <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ width: '100%', height: '100%', backgroundColor: '#000', position: 'relative' }}>
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                padding: '1.5rem 1rem',
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%)',
+                zIndex: 50,
+                pointerEvents: 'none',
+                display: 'flex',
+                justifyContent: 'center'
+              }}>
+                <h1 style={{ margin: 0, color: '#fff', fontSize: '1.4rem', fontWeight: 500, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                  {playingTitle}
+                </h1>
+              </div>
+
+              <div style={{ width: '100%', height: '100%' }}>
+                <VideoPlayer 
+                  options={{
+                    autoplay: true,
+                    controls: true,
+                    responsive: true,
+                    fluid: true,
+                    playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+                    sources: [
+                      {
+                        src: playingUrl,
+                        type: 'video/mp4'
+                      }
+                    ]
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
