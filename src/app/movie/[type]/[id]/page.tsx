@@ -266,6 +266,9 @@ export default function MovieDetails() {
           <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>{meta.name}</h1>
           <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
             <span>{meta.releaseInfo}</span>
+            {(meta as any).released && (
+              <span title="Přesné datum vydání">📅 {new Date((meta as any).released).toLocaleDateString('cs-CZ')}</span>
+            )}
             <span>⭐ {meta.imdbRating || 'N/A'}</span>
             {meta.genres && <span>{meta.genres.join(' • ')}</span>}
           </div>
@@ -276,37 +279,69 @@ export default function MovieDetails() {
 
           {type === 'series' && episodesList.length > 0 && (
             <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem' }}>
-              <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Vyberte epizodu</h3>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Série</label>
-                  <select 
-                    value={selectedSeason} 
-                    onChange={(e) => {
-                      setSelectedSeason(Number(e.target.value));
-                      const eps = episodesList.filter(ep => ep.season === Number(e.target.value)).sort((a, b) => a.episode - b.episode);
-                      if (eps.length > 0) setSelectedEpisode(eps[0].episode);
-                    }}
-                    className="input"
-                    style={{ width: '120px' }}
-                  >
-                    {availableSeasons.map(s => (
-                      <option key={s} value={s}>{s === 0 ? 'Speciály' : `Série ${s}`}</option>
-                    ))}
-                  </select>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1.1rem', color: 'var(--text-secondary)' }}>Série</h3>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {availableSeasons.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        setSelectedSeason(s);
+                        const eps = episodesList.filter(ep => ep.season === s).sort((a, b) => a.episode - b.episode);
+                        if (eps.length > 0) setSelectedEpisode(eps[0].episode);
+                      }}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: selectedSeason === s ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)',
+                        color: selectedSeason === s ? '#fff' : 'var(--text-primary)',
+                        cursor: 'pointer',
+                        fontWeight: selectedSeason === s ? 600 : 400,
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {s === 0 ? 'Speciály' : `Série ${s}`}
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Epizoda</label>
-                  <select 
-                    value={selectedEpisode} 
-                    onChange={(e) => setSelectedEpisode(Number(e.target.value))}
-                    className="input"
-                    style={{ width: '200px' }}
-                  >
-                    {availableEpisodes.map(e => (
-                      <option key={e.episode} value={e.episode}>Epizoda {e.episode} {e.title && `- ${e.title}`}</option>
-                    ))}
-                  </select>
+              </div>
+
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1.1rem', color: 'var(--text-secondary)' }}>Epizody</h3>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', maxHeight: '300px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                  {availableEpisodes.map(e => {
+                    const releaseDate = e.released ? new Date(e.released).toLocaleDateString('cs-CZ') : '';
+                    return (
+                      <button
+                        key={e.episode}
+                        onClick={() => setSelectedEpisode(e.episode)}
+                        style={{
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: '8px',
+                          border: 'none',
+                          backgroundColor: selectedEpisode === e.episode ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)',
+                          color: selectedEpisode === e.episode ? '#fff' : 'var(--text-primary)',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          minWidth: '140px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.2rem',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <span style={{ fontWeight: selectedEpisode === e.episode ? 600 : 500 }}>
+                          E{e.episode} {e.title && e.title.length < 25 ? `- ${e.title}` : ''}
+                        </span>
+                        {releaseDate && (
+                          <span style={{ fontSize: '0.75rem', color: selectedEpisode === e.episode ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)' }}>
+                            📅 {releaseDate}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
