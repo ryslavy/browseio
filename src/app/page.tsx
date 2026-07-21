@@ -232,7 +232,7 @@ function CatalogContent() {
 
   // UI Change Handlers
   const handleTypeChange = (newType: 'movie' | 'series') => {
-    updateUrlParams({ type: newType, genre: undefined, q: undefined });
+    updateUrlParams({ type: newType, genre: undefined }); // Persist 'q' (search query)
   };
 
   const handleGenreChange = (newGenre: string) => {
