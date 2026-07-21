@@ -218,6 +218,27 @@ export default function MovieDetails() {
     }
   };
 
+  const [playerIdle, setPlayerIdle] = useState(false);
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetIdleTimer = useCallback(() => {
+    setPlayerIdle(false);
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => setPlayerIdle(true), 2500); // fade out after 2.5s
+  }, []);
+
+  useEffect(() => {
+    if (playingUrl) {
+      resetIdleTimer();
+    } else {
+      setPlayerIdle(false);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    }
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [playingUrl, resetIdleTimer]);
+
   const getFilteredSources = () => {
     if (sourceFilter === 'all') return sources;
     return sources.filter(s => {
@@ -436,6 +457,8 @@ export default function MovieDetails() {
       {playingUrl && typeof document !== 'undefined' && createPortal(
         <div 
           className="fade-in" 
+          onMouseMove={resetIdleTimer}
+          onClick={resetIdleTimer}
           style={{ 
             position: 'fixed', 
             top: 0, 
@@ -449,7 +472,15 @@ export default function MovieDetails() {
           }}
         >
           {/* Floating Back Arrow Button */}
-          <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 100, pointerEvents: 'auto' }}>
+          <div style={{ 
+            position: 'absolute', 
+            top: '15px', 
+            left: '15px', 
+            zIndex: 100, 
+            pointerEvents: playerIdle ? 'none' : 'auto',
+            opacity: playerIdle ? 0 : 1,
+            transition: 'opacity 0.4s ease'
+          }}>
             <button 
               onClick={() => { setPlayingUrl(null); setPlayingTitle(''); }}
               className="btn btn-secondary" 
@@ -466,7 +497,7 @@ export default function MovieDetails() {
                 cursor: 'pointer'
               }}
             >
-              ⬅ Zpět k filmu
+              ⬅ Zpět
             </button>
           </div>
 
@@ -482,7 +513,9 @@ export default function MovieDetails() {
                 zIndex: 50,
                 pointerEvents: 'none',
                 display: 'flex',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                opacity: playerIdle ? 0 : 1,
+                transition: 'opacity 0.4s ease'
               }}>
                 <h1 style={{ margin: 0, color: '#fff', fontSize: '1.4rem', fontWeight: 500, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
                   {playingTitle}
