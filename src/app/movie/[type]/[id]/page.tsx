@@ -239,6 +239,22 @@ export default function MovieDetails() {
     };
   }, [playingUrl, resetIdleTimer]);
 
+  const videoOptions = useMemo(() => {
+    return {
+      autoplay: true,
+      controls: true,
+      responsive: true,
+      fill: true,
+      playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+      sources: playingUrl ? [
+        {
+          src: playingUrl,
+          type: playingUrl.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4'
+        }
+      ] : []
+    };
+  }, [playingUrl]);
+
   const getFilteredSources = () => {
     if (sourceFilter === 'all') return sources;
     return sources.filter(s => {
@@ -530,21 +546,7 @@ export default function MovieDetails() {
               </div>
 
               <div style={{ width: '100%', height: '100%' }}>
-                <VideoPlayer 
-                  options={useMemo(() => ({
-                    autoplay: true,
-                    controls: true,
-                    responsive: true,
-                    fill: true,
-                    playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
-                    sources: [
-                      {
-                        src: playingUrl,
-                        type: playingUrl?.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4'
-                      }
-                    ]
-                  }), [playingUrl])}
-                />
+                <VideoPlayer options={videoOptions} />
               </div>
             </div>
           </div>
