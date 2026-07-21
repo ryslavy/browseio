@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
 import { getTorrentioSources } from '@/lib/torrentio';
+import { getStreams as getHellspyStreams } from '@/lib/hellspy-scraper';
+import { getStreams as getSktOnlineStreams } from '@/lib/sktonline-scraper';
 
 interface MediaSource {
   name?: string;
@@ -71,16 +73,8 @@ export default function MovieDetails() {
     // Fetch all in parallel using Promise.allSettled
     const [torrentsRes, skRes, hRes, cRes] = await Promise.allSettled([
       getTorrentioSources(type as string, streamId),
-      fetch('/api/sktorrent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, type, season: selectedSeason, episode: selectedEpisode })
-      }).then(r => r.json()),
-      fetch('/api/hellspy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, type, season: selectedSeason, episode: selectedEpisode })
-      }).then(r => r.json()),
+      getSktOnlineStreams(id as string, type as string, selectedSeason, selectedEpisode).then(streams => ({ streams })).catch(e => { console.warn('SKTOnline client-side error', e); return { streams: [] }; }),
+      getHellspyStreams(id as string, type as string, selectedSeason, selectedEpisode).then(streams => ({ streams })).catch(e => { console.warn('Hellspy client-side error', e); return { streams: [] }; }),
       (() => {
         const uid = localStorage.getItem('sktorrent_uid');
         const pass = localStorage.getItem('sktorrent_pass');

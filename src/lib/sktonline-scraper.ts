@@ -24,6 +24,13 @@ function sleepSync(ms: number) {
   }
 }
 
+function getProxiedUrl(url: string) {
+  if (typeof window !== 'undefined') {
+    return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+  }
+  return url;
+}
+
 function pad(num: number | string, size: number) {
   let s = num + '';
   while (s.length < size) s = '0' + s;
@@ -330,7 +337,7 @@ async function searchOnlineVideos(query: string): Promise<string[]> {
   log('Searching: ' + query);
   const safeFetch = getSafeFetch();
   try {
-    const res = await safeFetch(url, { headers });
+    const res = await safeFetch(getProxiedUrl(url), { headers });
     if (!res.ok) throw new Error('Search HTTP ' + res.status);
     const html = await res.text();
     if (!html) return [];
@@ -362,7 +369,7 @@ async function extractStreamsFromVideoId(videoId: string, meta?: MediaInfo | nul
   log('Extracting video detail: ' + videoId);
   const safeFetch = getSafeFetch();
   try {
-    const res = await safeFetch(url, { headers });
+    const res = await safeFetch(getProxiedUrl(url), { headers });
     if (!res.ok) throw new Error('Detail HTTP ' + res.status);
     const html = await res.text();
     if (!html) return [];
