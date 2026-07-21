@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
 import { getTorrentioSources } from '@/lib/torrentio';
 import { getStreams as getHellspyStreams } from '@/lib/hellspy-scraper';
-import { getStreams as getSktOnlineStreams } from '@/lib/sktonline-scraper';
 
 interface MediaSource {
   name?: string;
@@ -71,9 +70,8 @@ export default function MovieDetails() {
     const streamId = type === 'series' ? `${id}:${selectedSeason}:${selectedEpisode}` : (id as string);
     
     // Fetch all in parallel using Promise.allSettled
-    const [torrentsRes, skRes, hRes, cRes] = await Promise.allSettled([
+    const [torrentsRes, hRes, cRes] = await Promise.allSettled([
       getTorrentioSources(type as string, streamId),
-      getSktOnlineStreams(id as string, type as string, selectedSeason, selectedEpisode).then(streams => ({ streams })).catch(e => { console.warn('SKTOnline client-side error', e); return { streams: [] }; }),
       getHellspyStreams(id as string, type as string, selectedSeason, selectedEpisode).then(streams => ({ streams })).catch(e => { console.warn('Hellspy client-side error', e); return { streams: [] }; }),
       (() => {
         const uid = localStorage.getItem('sktorrent_uid');
@@ -90,11 +88,10 @@ export default function MovieDetails() {
     ]);
 
     const torrents: MediaSource[] = torrentsRes.status === 'fulfilled' ? torrentsRes.value : [];
-    const skTorrents: MediaSource[] = skRes.status === 'fulfilled' && skRes.value.streams ? skRes.value.streams : [];
     const hellspyStreams: MediaSource[] = hRes.status === 'fulfilled' && hRes.value.streams ? hRes.value.streams : [];
     const skClassicStreams: MediaSource[] = cRes.status === 'fulfilled' && cRes.value.streams ? cRes.value.streams : [];
 
-    let mergedSources = [...torrents, ...skTorrents, ...hellspyStreams, ...skClassicStreams];
+    let mergedSources = [...torrents, ...hellspyStreams, ...skClassicStreams];
 
     // TorBox Debrid Cache Check
     const torboxApiKey = localStorage.getItem('torbox_api_key');
@@ -220,7 +217,6 @@ export default function MovieDetails() {
        if (sourceFilter === 'TorBox' && s.isTorBoxCached) return true;
        if (sourceFilter === 'Torrentio' && s.name && s.name.toLowerCase().includes('torrentio')) return true;
        if (sourceFilter === 'Torrentio' && !s.name) return true;
-       if (sourceFilter === 'SKTOnline' && s.name && s.name.toLowerCase().includes('sktonline')) return true;
        if (sourceFilter === 'SKTorrent' && s.name && s.name === 'SKTorrent') return true;
        if (sourceFilter === 'Hellspy' && s.name && s.name.toLowerCase().includes('hellspy')) return true;
        return false;
@@ -321,7 +317,6 @@ export default function MovieDetails() {
             {[
               { id: 'all', label: 'Všechny' },
               { id: 'Torrentio', label: 'Torrentio' },
-              { id: 'SKTOnline', label: 'SKTOnline' },
               { id: 'SKTorrent', label: 'SKTorrent' },
               { id: 'Hellspy', label: 'Hellspy' }
             ].map(src => (
