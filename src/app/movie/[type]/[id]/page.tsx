@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -531,7 +531,7 @@ export default function MovieDetails() {
 
               <div style={{ width: '100%', height: '100%' }}>
                 <VideoPlayer 
-                  options={{
+                  options={useMemo(() => ({
                     autoplay: true,
                     controls: true,
                     responsive: true,
@@ -543,7 +543,7 @@ export default function MovieDetails() {
                         type: 'video/mp4'
                       }
                     ]
-                  }}
+                  }), [playingUrl])}
                 />
               </div>
             </div>
