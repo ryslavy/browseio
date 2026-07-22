@@ -42,11 +42,70 @@ export async function getCatalog(type: 'movie' | 'series', category: string = 't
   }
 }
 
+const TMDB_API_KEY = '4219e299c89411838049ab0dab19ebd5';
+
 export async function searchCinemeta(query: string, type: 'movie' | 'series' = 'movie'): Promise<MetaItem[]> {
   try {
-    const res = await fetch(`https://v3-cinemeta.strem.io/catalog/${type}/top/search=${encodeURIComponent(query)}.json`);
-    const data = await res.json();
-    return data.metas || [];
+    const tmdbType = type === 'series' ? 'tv' : 'movie';
+    
+    // Fetch Cinemeta search + TMDB Czech search in parallel
+    const [cinemetaRes, tmdbRes] = await Promise.allSettled([
+      fetch(`https://v3-cinemeta.strem.io/catalog/${type}/top/search=${encodeURIComponent(query)}.json`).then(r => r.json()),
+      fetch(`https://api.themoviedb.org/3/search/${tmdbType}?api_key=${TMDB_API_KEY}&language=cs-CZ&query=${encodeURIComponent(query)}`).then(r => r.json())
+    ]);
+
+    const cinemetaMetas: MetaItem[] = cinemetaRes.status === 'fulfilled' && cinemetaRes.value?.metas ? cinemetaRes.value.metas : [];
+    const tmdbResults: any[] = tmdbRes.status === 'fulfilled' && tmdbRes.value?.results ? tmdbRes.value.results.slice(0, 10) : [];
+
+    // Resolve IMDb IDs for TMDB search results
+    const tmdbMetas: MetaItem[] = [];
+    if (tmdbResults.length > 0) {
+      const extIds = await Promise.allSettled(
+        tmdbResults.map(item => 
+          fetch(`https://api.themoviedb.org/3/${tmdbType}/${item.id}/external_ids?api_key=${TMDB_API_KEY}`).then(r => r.json())
+        )
+      );
+
+      for (let i = 0; i < tmdbResults.length; i++) {
+        const item = tmdbResults[i];
+        const extRes = extIds[i];
+        const imdbId = extRes.status === 'fulfilled' && extRes.value?.imdb_id ? extRes.value.imdb_id : null;
+        
+        if (imdbId) {
+          const year = (item.release_date || item.first_air_date || '').split('-')[0];
+          tmdbMetas.push({
+            id: imdbId,
+            type: type,
+            name: item.title || item.name || item.original_title || item.original_name,
+            poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined,
+            background: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : undefined,
+            description: item.overview || '',
+            releaseInfo: year,
+            imdbRating: item.vote_average ? String(item.vote_average.toFixed(1)) : undefined
+          });
+        }
+      }
+    }
+
+    // Merge TMDB metas (Czech search matches) first, then Cinemeta search results, avoiding duplicates
+    const seenIds = new Set<string>();
+    const mergedMetas: MetaItem[] = [];
+
+    for (const item of tmdbMetas) {
+      if (!seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        mergedMetas.push(item);
+      }
+    }
+
+    for (const item of cinemetaMetas) {
+      if (!seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        mergedMetas.push(item);
+      }
+    }
+
+    return mergedMetas;
   } catch (error) {
     console.error('Error searching:', error);
     return [];
