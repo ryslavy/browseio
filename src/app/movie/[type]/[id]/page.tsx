@@ -273,6 +273,27 @@ export default function MovieDetails() {
     alert('Stahování pro tento zdroj není k dispozici.');
   };
 
+  const [copiedMagnetIdx, setCopiedMagnetIdx] = useState<number | null>(null);
+
+  const handleCopyMagnet = async (source: MediaSource, idx: number) => {
+    const { infoHash, magnet } = source;
+    const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+    const magnetUrl = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
+
+    if (magnetUrl) {
+      try {
+        await navigator.clipboard.writeText(magnetUrl);
+        setCopiedMagnetIdx(idx);
+        setTimeout(() => setCopiedMagnetIdx(null), 2000);
+      } catch (e) {
+        console.error('Failed to copy magnet:', e);
+        alert('Nepodařilo se zkopírovat magnet odkaz.');
+      }
+    } else {
+      alert('Magnet odkaz není k dispozici.');
+    }
+  };
+
   const [playerIdle, setPlayerIdle] = useState(false);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -521,6 +542,9 @@ export default function MovieDetails() {
                     <>
                       <button onClick={() => handleDownload(source)} className="btn btn-secondary">
                         📥 Stáhnout (Magnet)
+                      </button>
+                      <button onClick={() => handleCopyMagnet(source, idx)} className="btn btn-secondary" title="Zkopírovat magnet odkaz do schránky">
+                        {copiedMagnetIdx === idx ? '✅ Zkopírováno!' : '📋 Zkopírovat magnet'}
                       </button>
                     </>
                   )}
