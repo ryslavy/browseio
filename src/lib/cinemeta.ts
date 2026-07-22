@@ -157,16 +157,13 @@ export async function getMetaDetails(type: string, id: string): Promise<MetaItem
     }
 
     if (!meta) {
-      if (czTitle || originalTitle) {
-        return {
-          id: realId,
-          type: type,
-          name: czTitle || originalTitle || realId,
-          czTitle: czTitle,
-          originalTitle: originalTitle
-        };
-      }
-      return null;
+      return {
+        id: realId,
+        type: type,
+        name: czTitle || originalTitle || realId,
+        czTitle: czTitle,
+        originalTitle: originalTitle
+      };
     }
 
     return {
