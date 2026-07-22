@@ -74,40 +74,19 @@ export default function MovieDetails() {
     setSources([]);
 
     const streamId = type === 'series' ? `${id}:${selectedSeason}:${selectedEpisode}` : (id as string);
-    
-    // Fetch all in parallel using Promise.allSettled
-    const [torrentsRes, hRes, cRes] = await Promise.allSettled([
-      getTorrentioSources(type as string, streamId),
-      getHellspyStreams(id as string, type as string, selectedSeason, selectedEpisode).then(streams => ({ streams })).catch(e => { console.warn('Hellspy client-side error', e); return { streams: [] }; }),
-      (() => {
-        const uid = localStorage.getItem('sktorrent_uid');
-        const pass = localStorage.getItem('sktorrent_pass');
-        if (uid && pass) {
-          return fetch('/api/sktorrent-classic', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, type, season: selectedSeason, episode: selectedEpisode, uid, pass })
-          }).then(r => r.json());
-        }
-        return Promise.resolve({ streams: [] });
-      })()
-    ]);
-
-    const torrents: MediaSource[] = torrentsRes.status === 'fulfilled' ? torrentsRes.value : [];
-    const hellspyStreams: MediaSource[] = hRes.status === 'fulfilled' && hRes.value.streams ? hRes.value.streams : [];
-    const skClassicStreams: MediaSource[] = cRes.status === 'fulfilled' && cRes.value.streams ? cRes.value.streams : [];
-
-    let mergedSources = [...torrents, ...hellspyStreams, ...skClassicStreams];
-
-    // TorBox Debrid Cache Check
     const torboxApiKey = localStorage.getItem('torbox_api_key');
-    const hashesToCheck: string[] = [];
-    mergedSources.forEach(s => {
-      const hash = s.infoHash || (s.magnet ? new URLSearchParams(s.magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
-      if (hash) hashesToCheck.push(hash);
-    });
 
-    if (hashesToCheck.length > 0) {
+    let pendingProviders = 3;
+
+    const checkTorBoxCacheForSources = async (newSources: MediaSource[]) => {
+      const hashesToCheck: string[] = [];
+      newSources.forEach(s => {
+        const hash = s.infoHash || (s.magnet ? new URLSearchParams(s.magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+        if (hash) hashesToCheck.push(hash);
+      });
+
+      if (hashesToCheck.length === 0) return newSources;
+
       try {
         const tbRes = await fetch('/api/torbox', {
           method: 'POST',
@@ -117,7 +96,7 @@ export default function MovieDetails() {
         const tbData = await tbRes.json();
         if (tbData.cached && Array.isArray(tbData.cached)) {
           const cachedSet = new Set(tbData.cached.map((h: string) => h.toLowerCase()));
-          mergedSources = mergedSources.map(s => {
+          return newSources.map(s => {
             const hash = s.infoHash || (s.magnet ? new URLSearchParams(s.magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
             if (hash && cachedSet.has(hash.toLowerCase())) {
               return { ...s, isTorBoxCached: true };
@@ -128,13 +107,57 @@ export default function MovieDetails() {
       } catch (e) {
         console.error('TorBox cache check failed:', e);
       }
-    }
+      return newSources;
+    };
 
-    // Only update state if this is still the active fetch!
-    if (activeFetchIdRef.current === fetchId) {
-      setSources(mergedSources);
-      setFetchingStreams(false);
-    }
+    const handleProviderResult = async (rawStreams: MediaSource[]) => {
+      if (activeFetchIdRef.current !== fetchId) return;
+      if (!rawStreams || rawStreams.length === 0) {
+        pendingProviders--;
+        if (pendingProviders <= 0) setFetchingStreams(false);
+        return;
+      }
+
+      // Check TorBox cache for these streams
+      const processedStreams = await checkTorBoxCacheForSources(rawStreams);
+
+      if (activeFetchIdRef.current === fetchId) {
+        setSources(prev => {
+          const existing = new Set(prev.map(s => s.url || s.magnet || s.title));
+          const fresh = processedStreams.filter(s => !existing.has(s.url || s.magnet || s.title));
+          return [...prev, ...fresh];
+        });
+        pendingProviders--;
+        if (pendingProviders <= 0) setFetchingStreams(false);
+      }
+    };
+
+    // 1. Hellspy (fastest)
+    getHellspyStreams(id as string, type as string, selectedSeason, selectedEpisode)
+      .then(streams => handleProviderResult(streams))
+      .catch(() => handleProviderResult([]));
+
+    // 2. Torrentio
+    getTorrentioSources(type as string, streamId)
+      .then(streams => handleProviderResult(streams))
+      .catch(() => handleProviderResult([]));
+
+    // 3. SKTorrent Classic
+    (() => {
+      const uid = localStorage.getItem('sktorrent_uid');
+      const pass = localStorage.getItem('sktorrent_pass');
+      if (uid && pass) {
+        return fetch('/api/sktorrent-classic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, type, season: selectedSeason, episode: selectedEpisode, uid, pass })
+        }).then(r => r.json()).then(data => data.streams || []);
+      }
+      return Promise.resolve([]);
+    })()
+      .then(streams => handleProviderResult(streams))
+      .catch(() => handleProviderResult([]));
+
   }, [type, id, selectedSeason, selectedEpisode]);
 
   useEffect(() => {
@@ -514,8 +537,14 @@ export default function MovieDetails() {
 
       <div style={{ marginTop: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ color: 'var(--accent-color)' }}>Dostupné</span> streamy {fetchingStreams ? '' : `(${filteredSources.length})`}
+          <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--accent-color)' }}>Dostupné</span> streamy ({filteredSources.length})
+            {fetchingStreams && (
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+                <div className="spinner" style={{ width: '13px', height: '13px', borderWidth: '2px' }}></div>
+                Hledám další zdroje...
+              </span>
+            )}
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>Zdroj:</span>
@@ -543,7 +572,7 @@ export default function MovieDetails() {
           </div>
         </div>
         
-        {fetchingStreams ? (
+        {fetchingStreams && sources.length === 0 ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><div className="spinner"></div></div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
