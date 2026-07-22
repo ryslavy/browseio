@@ -349,12 +349,20 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     };
   }, [playingUrl]);
 
+  const availableProviders = useMemo(() => {
+    const plugins = getInstalledPlugins().filter(p => p.enabled);
+    const providers = [{ id: 'all', label: 'Všechny' }];
+    plugins.forEach(p => {
+      providers.push({ id: p.name, label: p.name });
+    });
+    return providers;
+  }, []);
+
   const getFilteredSources = () => {
     if (sourceFilter === 'all') return sources;
     return sources.filter(s => {
        if (sourceFilter === 'TorBox' && s.isTorBoxCached) return true;
-       if (sourceFilter === 'Torrentio' && s.name && s.name.toLowerCase().includes('torrentio')) return true;
-       if (sourceFilter === 'Torrentio' && !s.name) return true;
+       if (s.name && s.name.toLowerCase().includes(sourceFilter.toLowerCase())) return true;
        return false;
     });
   };
@@ -497,10 +505,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>Zdroj:</span>
-            {[
-              { id: 'all', label: 'Všechny' },
-              { id: 'Torrentio', label: 'Torrentio' }
-            ].map(src => (
+            {availableProviders.map(src => (
               <button
                 key={src.id}
                 onClick={() => setSourceFilter(src.id)}

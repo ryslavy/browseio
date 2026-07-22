@@ -18,9 +18,36 @@ function warn(message: string) {
 }
 
 function getSafeFetch() {
-  if (typeof fetch === 'function') return fetch;
-  if (typeof globalThis !== 'undefined' && globalThis.fetch) return globalThis.fetch;
-  throw new Error('fetch API is not available in this runtime');
+  const baseFetch = (typeof fetch === 'function' ? fetch : globalThis.fetch).bind(globalThis);
+
+  if (typeof window === 'undefined') {
+    return baseFetch;
+  }
+
+  return async (url: string | URL | Request, init?: RequestInit) => {
+    const urlStr = typeof url === 'string' ? url : url.toString();
+
+    if (urlStr.startsWith('/') || urlStr.includes('strem.fun') || urlStr.includes('strem.io') || urlStr.includes('themoviedb.org')) {
+      return baseFetch(url, init);
+    }
+
+    const corsProxies = [
+      (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+    ];
+
+    for (const proxyFn of corsProxies) {
+      try {
+        const proxiedUrl = proxyFn(urlStr);
+        const res = await baseFetch(proxiedUrl, init);
+        if (res.ok) return res;
+      } catch (e) {
+        console.warn('CORS proxy failed, trying fallback:', e);
+      }
+    }
+
+    return baseFetch(url, init);
+  };
 }
 
 function formatBytes(bytes: number) {
