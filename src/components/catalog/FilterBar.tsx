@@ -48,7 +48,7 @@ export function FilterBar({
               placeholder={`Hledat ${type === 'movie' ? 'film' : 'seriál'}...`}
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
-              style={{ padding: '1rem 3rem 1rem 1.5rem', fontSize: '1.1rem', borderRadius: '2rem', width: '100%' }}
+              style={{ padding: '1rem 3.5rem 1rem 1.5rem', fontSize: '1.1rem', borderRadius: '2rem', width: '100%' }}
             />
             {inputVal && (
               <button
@@ -56,14 +56,14 @@ export function FilterBar({
                 onClick={handleClearSearch}
                 style={{
                   position: 'absolute',
-                  right: '1rem',
+                  right: '1.4rem',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   background: 'rgba(255, 255, 255, 0.15)',
                   border: 'none',
                   borderRadius: '50%',
-                  width: '26px',
-                  height: '26px',
+                  width: '24px',
+                  height: '24px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
