@@ -23,6 +23,37 @@ export async function POST(request: Request) {
       }
     }
 
+    if (action === 'cache') {
+      if (!apiKey) {
+        return NextResponse.json({ error: 'Chybí TorBox API klíč v nastavení.' }, { status: 400 });
+      }
+      const magnetUrl = magnet || (hashes && hashes[0] ? `magnet:?xt=urn:btih:${hashes[0]}` : null);
+      if (!magnetUrl) {
+        return NextResponse.json({ error: 'Chybí magnet odkaz' }, { status: 400 });
+      }
+      
+      const bodyData = new URLSearchParams();
+      bodyData.append('magnet', magnetUrl);
+      bodyData.append('seed', '1');
+      bodyData.append('allow_zip', 'false');
+
+      const createRes = await fetch('https://api.torbox.app/v1/api/torrents/createtorrent', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: bodyData
+      });
+
+      const createJson = await createRes.json();
+      if (createJson.success) {
+        return NextResponse.json({ success: true, message: createJson.detail || 'Torrent byl přidán do TorBox ke stažení/nacacheování!' });
+      } else {
+        return NextResponse.json({ error: createJson.detail || 'Nepodařilo se přidat torrent do TorBoxu' }, { status: 400 });
+      }
+    }
+
     return NextResponse.json({ error: 'Neplatný požadavek' }, { status: 400 });
   } catch (error) {
     console.error('TorBox API Route Error:', error);

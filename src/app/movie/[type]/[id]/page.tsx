@@ -274,6 +274,8 @@ export default function MovieDetails() {
   };
 
   const [copiedMagnetIdx, setCopiedMagnetIdx] = useState<number | null>(null);
+  const [cachingIdx, setCachingIdx] = useState<number | null>(null);
+  const [cachedSuccessIdx, setCachedSuccessIdx] = useState<number | null>(null);
 
   const handleCopyMagnet = async (source: MediaSource, idx: number) => {
     const { infoHash, magnet } = source;
@@ -291,6 +293,48 @@ export default function MovieDetails() {
       }
     } else {
       alert('Magnet odkaz není k dispozici.');
+    }
+  };
+
+  const handleCacheTorBox = async (source: MediaSource, idx: number) => {
+    const torboxApiKey = localStorage.getItem('torbox_api_key');
+    if (!torboxApiKey) {
+      alert('Chybí TorBox API klíč. Přidejte si jej v Nastavení v pravém horním rohu.');
+      return;
+    }
+
+    const { infoHash, magnet } = source;
+    const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+    const magnetUrl = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
+
+    if (!magnetUrl) {
+      alert('Magnet odkaz není k dispozici.');
+      return;
+    }
+
+    setCachingIdx(idx);
+    try {
+      const res = await fetch('/api/torbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cache',
+          magnet: magnetUrl,
+          apiKey: torboxApiKey
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCachedSuccessIdx(idx);
+        setTimeout(() => setCachedSuccessIdx(null), 4000);
+      } else {
+        alert(data.error || 'Nepodařilo se přidat torrent do TorBoxu.');
+      }
+    } catch (e) {
+      console.error('TorBox cache request failed:', e);
+      alert('Chyba při komunikaci s TorBox API.');
+    } finally {
+      setCachingIdx(null);
     }
   };
 
@@ -540,6 +584,15 @@ export default function MovieDetails() {
                   )}
                   {(source.magnet || source.infoHash) && !source.isTorBoxCached && (
                     <>
+                      <button 
+                        onClick={() => handleCacheTorBox(source, idx)} 
+                        disabled={cachingIdx === idx}
+                        className="btn btn-secondary" 
+                        style={{ border: '1px solid rgba(234, 179, 8, 0.5)', color: '#eab308', opacity: cachingIdx === idx ? 0.7 : 1 }}
+                        title="Odeslat torrent do TorBox cloudu k okamžitému stažení / cache"
+                      >
+                        {cachingIdx === idx ? '⏳ Ukládám...' : cachedSuccessIdx === idx ? '✅ Přidáno do TorBoxu!' : '⚡ Nacacheovat do TorBoxu'}
+                      </button>
                       <button onClick={() => handleDownload(source)} className="btn btn-secondary">
                         📥 Stáhnout (Magnet)
                       </button>
