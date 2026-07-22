@@ -51,6 +51,47 @@ export function savePlugins(plugins: PluginManifest[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(plugins));
 }
 
+const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+  if (urlStr.startsWith('/') || urlStr.includes('themoviedb.org') || urlStr.includes('strem.io') || urlStr.includes('localhost')) {
+    return fetch(input, init);
+  }
+
+  const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
+  const corsProxies: ((u: string) => string)[] = [];
+
+  if (customProxy && customProxy.trim()) {
+    const cp = customProxy.trim();
+    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
+  }
+
+  corsProxies.push(
+    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+  );
+
+  for (const proxyFn of corsProxies) {
+    try {
+      const proxiedUrl = proxyFn(urlStr);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const res = await fetch(proxiedUrl, {
+        ...init,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) return res;
+    } catch (e) {
+      // Fast fail over CORS/Timeout
+    }
+  }
+
+  throw new Error(`CORS_FETCH_FAILED: ${urlStr}`);
+};
+
 export async function installPluginFromUrl(urlInput: string): Promise<PluginManifest> {
   let cleanUrl = urlInput.trim();
 
@@ -62,9 +103,16 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
     cleanUrl = cleanUrl.endsWith('/') ? `${cleanUrl}manifest.json` : `${cleanUrl}/manifest.json`;
   }
 
-  const res = await fetch(cleanUrl);
-  if (!res.ok) {
-    throw new Error(`Doplněk na zadané URL neodpovídá (HTTP ${res.status})`);
+  let res: Response | null = null;
+  try {
+    res = await fetch(cleanUrl);
+    if (!res.ok) throw new Error();
+  } catch {
+    res = await corsFetch(cleanUrl);
+  }
+
+  if (!res || !res.ok) {
+    throw new Error(`Doplněk na zadané URL neodpovídá (HTTP ${res ? res.status : 'Error'})`);
   }
 
   const text = await res.text();
@@ -114,47 +162,6 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
 
   return newPlugin;
 }
-
-const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-  const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-
-  if (urlStr.startsWith('/') || urlStr.includes('themoviedb.org') || urlStr.includes('strem.io') || urlStr.includes('localhost')) {
-    return fetch(input, init);
-  }
-
-  const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
-  const corsProxies: ((u: string) => string)[] = [];
-
-  if (customProxy && customProxy.trim()) {
-    const cp = customProxy.trim();
-    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
-  }
-
-  corsProxies.push(
-    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
-  );
-
-  for (const proxyFn of corsProxies) {
-    try {
-      const proxiedUrl = proxyFn(urlStr);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-      const res = await fetch(proxiedUrl, {
-        ...init,
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (res.ok) return res;
-    } catch (e) {
-      // Fast fail over CORS/Timeout
-    }
-  }
-
-  throw new Error(`CORS_FETCH_FAILED: ${urlStr}`);
-};
 
 export async function fetchStreamsFromPlugin(
   plugin: PluginManifest,
@@ -264,13 +271,20 @@ export async function fetchStreamsFromPlugin(
     }
   }
 
-  // Handle Stremio Addons
+  // Handle Stremio Addons (Try direct fetch first, fallback to CORS proxy)
   try {
     const streamId = type === 'series' && season && episode ? `${id}:${season}:${episode}` : id;
     const requestUrl = `${baseUrl}/stream/${type}/${streamId}.json`;
 
-    const res = await corsFetch(requestUrl);
-    if (!res.ok) return [];
+    let res: Response | null = null;
+    try {
+      res = await fetch(requestUrl);
+      if (!res.ok) throw new Error('Direct fetch failed');
+    } catch {
+      res = await corsFetch(requestUrl);
+    }
+
+    if (!res || !res.ok) return [];
 
     const data = await res.json();
     if (!data.streams || !Array.isArray(data.streams)) return [];
