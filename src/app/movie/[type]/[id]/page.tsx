@@ -420,7 +420,19 @@ export default function MovieDetails() {
         </div>
         
         <div style={{ flex: '1 1 400px' }}>
-          <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>{meta.name}</h1>
+          <h1 style={{ fontSize: '2.5rem', marginBottom: meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle ? '0.2rem' : '0.5rem', lineHeight: 1.15 }}>
+            {meta.czTitle || meta.name}
+          </h1>
+          {meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle && (
+            <div style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '1rem', fontWeight: 400 }}>
+              ({meta.originalTitle})
+            </div>
+          )}
+          {(!meta.czTitle && meta.name && meta.originalTitle && meta.name !== meta.originalTitle) && (
+            <div style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '1rem', fontWeight: 400 }}>
+              ({meta.originalTitle})
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
             <span>{meta.releaseInfo}</span>
             {(meta as any).released && (

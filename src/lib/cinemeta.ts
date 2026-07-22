@@ -11,6 +11,8 @@ export interface MetaItem {
   id: string;
   type: string;
   name: string;
+  czTitle?: string;
+  originalTitle?: string;
   genres?: string[];
   poster?: string;
   background?: string;
@@ -19,6 +21,8 @@ export interface MetaItem {
   imdbRating?: string;
   videos?: Episode[];
 }
+
+const TMDB_API_KEY = '4219e299c89411838049ab0dab19ebd5';
 
 export async function getCatalog(type: 'movie' | 'series', category: string = 'top', skip: number = 0): Promise<MetaItem[]> {
   try {
@@ -41,8 +45,6 @@ export async function getCatalog(type: 'movie' | 'series', category: string = 't
     return [];
   }
 }
-
-const TMDB_API_KEY = '4219e299c89411838049ab0dab19ebd5';
 
 export async function searchCinemeta(query: string, type: 'movie' | 'series' = 'movie'): Promise<MetaItem[]> {
   try {
@@ -73,10 +75,14 @@ export async function searchCinemeta(query: string, type: 'movie' | 'series' = '
         
         if (imdbId) {
           const year = (item.release_date || item.first_air_date || '').split('-')[0];
+          const czName = item.title || item.name;
+          const origName = item.original_title || item.original_name;
           tmdbMetas.push({
             id: imdbId,
             type: type,
-            name: item.title || item.name || item.original_title || item.original_name,
+            name: czName || origName,
+            czTitle: czName,
+            originalTitle: origName,
             poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined,
             background: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : undefined,
             description: item.overview || '',
@@ -114,9 +120,52 @@ export async function searchCinemeta(query: string, type: 'movie' | 'series' = '
 
 export async function getMetaDetails(type: string, id: string): Promise<MetaItem | null> {
   try {
-    const res = await fetch(`https://v3-cinemeta.strem.io/meta/${type}/${id}.json`);
-    const data = await res.json();
-    return data.meta || null;
+    const tmdbType = type === 'series' ? 'tv' : 'movie';
+    const isImdb = id.startsWith('tt');
+    const tmdbUrl = isImdb
+      ? `https://api.themoviedb.org/3/find/${id}?api_key=${TMDB_API_KEY}&external_source=imdb_id&language=cs-CZ`
+      : `https://api.themoviedb.org/3/${tmdbType}/${id}?api_key=${TMDB_API_KEY}&language=cs-CZ`;
+
+    const [cinemetaRes, tmdbRes] = await Promise.allSettled([
+      fetch(`https://v3-cinemeta.strem.io/meta/${type}/${id}.json`).then(r => r.json()),
+      fetch(tmdbUrl).then(r => r.json())
+    ]);
+
+    const meta: MetaItem | null = cinemetaRes.status === 'fulfilled' ? cinemetaRes.value?.meta || null : null;
+    
+    let czTitle: string | undefined;
+    let originalTitle: string | undefined;
+
+    if (tmdbRes.status === 'fulfilled' && tmdbRes.value) {
+      const tmdbData = tmdbRes.value;
+      let matchedObj = tmdbData;
+      if (isImdb) {
+        matchedObj = (tmdbData.movie_results && tmdbData.movie_results[0]) || (tmdbData.tv_results && tmdbData.tv_results[0]) || null;
+      }
+      if (matchedObj) {
+        czTitle = matchedObj.title || matchedObj.name;
+        originalTitle = matchedObj.original_title || matchedObj.original_name;
+      }
+    }
+
+    if (!meta) {
+      if (czTitle || originalTitle) {
+        return {
+          id: id,
+          type: type,
+          name: czTitle || originalTitle || id,
+          czTitle: czTitle,
+          originalTitle: originalTitle
+        };
+      }
+      return null;
+    }
+
+    return {
+      ...meta,
+      czTitle: czTitle || meta.czTitle,
+      originalTitle: originalTitle || meta.originalTitle || meta.name
+    };
   } catch (error) {
     console.error('Error fetching meta details:', error);
     return null;
