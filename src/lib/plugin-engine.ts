@@ -1,5 +1,5 @@
 // Universal Plugin & Addon Engine for BrowseIO
-// Supports Stremio Addons & Nuvio Executable JS Plugins via dynamic module runner
+// Supports Stremio Addons & Nuvio Executable JS Plugins via dynamic CORS-enabled module runner
 
 export interface PluginManifest {
   id: string;
@@ -29,44 +29,17 @@ export interface StreamSource {
 
 const STORAGE_KEY = 'browseio_installed_plugins';
 
-const DEFAULT_PLUGINS: PluginManifest[] = [
-  {
-    id: 'torrentio',
-    name: 'Torrentio',
-    version: '1.0.0',
-    description: 'Official Torrentio Stremio Addon for high-speed torrent streams',
-    type: 'stremio',
-    manifestUrl: 'https://torrentio.strem.fun/manifest.json',
-    enabled: true,
-    isBuiltIn: true,
-  },
-];
+// NO built-in default plugins to comply with regulations.
+const DEFAULT_PLUGINS: PluginManifest[] = [];
 
 export function getInstalledPlugins(): PluginManifest[] {
   if (typeof window === 'undefined') return DEFAULT_PLUGINS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_PLUGINS));
       return DEFAULT_PLUGINS;
     }
-    const parsed: PluginManifest[] = JSON.parse(raw);
-    
-    const pluginIds = new Set(parsed.map(p => p.id));
-    let updated = [...parsed];
-    let changed = false;
-
-    DEFAULT_PLUGINS.forEach(dp => {
-      if (!pluginIds.has(dp.id)) {
-        updated.push(dp);
-        changed = true;
-      }
-    });
-
-    if (changed) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    }
-    return updated;
+    return JSON.parse(raw);
   } catch (e) {
     console.error('Failed to load plugins:', e);
     return DEFAULT_PLUGINS;
@@ -142,6 +115,31 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
   return newPlugin;
 }
 
+const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+  if (urlStr.startsWith('/') || urlStr.includes('themoviedb.org') || urlStr.includes('strem.io') || urlStr.includes('localhost')) {
+    return fetch(input, init);
+  }
+
+  const corsProxies = [
+    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+  ];
+
+  for (const proxyFn of corsProxies) {
+    try {
+      const proxiedUrl = proxyFn(urlStr);
+      const res = await fetch(proxiedUrl, init);
+      if (res.ok) return res;
+    } catch (e) {
+      console.warn('CORS proxy failed, trying fallback:', e);
+    }
+  }
+
+  return fetch(input, init);
+};
+
 export async function fetchStreamsFromPlugin(
   plugin: PluginManifest,
   type: string,
@@ -154,10 +152,10 @@ export async function fetchStreamsFromPlugin(
 
   const baseUrl = plugin.manifestUrl.replace('/manifest.json', '').replace(/\/$/, '');
 
-  // Handle Nuvio JS Plugins
+  // Handle Nuvio Executable JS Plugins
   if (plugin.type === 'nuvio' || plugin.manifestUrl.includes('scrapelord')) {
     try {
-      const mRes = await fetch(plugin.manifestUrl);
+      const mRes = await corsFetch(plugin.manifestUrl);
       if (!mRes.ok) return [];
       const manifest = await mRes.json();
       const scrapers = manifest.scrapers || [];
@@ -170,13 +168,18 @@ export async function fetchStreamsFromPlugin(
           if (scraper.enabled === false) return;
           try {
             const jsUrl = `${baseUrl}/${scraper.filename}`;
-            const jsRes = await fetch(jsUrl);
+            const jsRes = await corsFetch(jsUrl);
             if (!jsRes.ok) return;
 
             const code = await jsRes.text();
             const mod: any = { exports: {} };
-            const runner = new Function('module', 'exports', 'globalThis', code);
-            runner(mod, mod.exports, globalThis);
+
+            const customGlobalThis = Object.create(globalThis, {
+              fetch: { value: corsFetch, writable: true, configurable: true }
+            });
+
+            const runner = new Function('module', 'exports', 'globalThis', 'fetch', code);
+            runner(mod, mod.exports, customGlobalThis, corsFetch);
 
             if (typeof mod.exports.getStreams === 'function') {
               const raw = await mod.exports.getStreams({
@@ -239,7 +242,7 @@ export async function fetchStreamsFromPlugin(
     const streamId = type === 'series' && season && episode ? `${id}:${season}:${episode}` : id;
     const requestUrl = `${baseUrl}/stream/${type}/${streamId}.json`;
 
-    const res = await fetch(requestUrl);
+    const res = await corsFetch(requestUrl);
     if (!res.ok) return [];
 
     const data = await res.json();
@@ -264,7 +267,7 @@ export async function fetchStreamsFromPlugin(
       const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
 
       return {
-        name: plugin.name,
+        name: s.name || plugin.name,
         title: namePart,
         url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
         magnet: magnet,
