@@ -9,6 +9,7 @@ interface FilterBarProps {
   onGenreChange: (genre: string) => void;
   onSearchSubmit: (query: string) => void;
   type: 'movie' | 'series';
+  loading?: boolean;
 }
 
 export function FilterBar({
@@ -18,6 +19,7 @@ export function FilterBar({
   onGenreChange,
   onSearchSubmit,
   type,
+  loading = false,
 }: FilterBarProps) {
   const [inputVal, setInputVal] = useState(searchQuery);
   const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
@@ -37,6 +39,8 @@ export function FilterBar({
     onSearchSubmit('');
   };
 
+  const isSearching = loading && Boolean(searchQuery);
+
   return (
     <div style={{ marginBottom: '2rem' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto 2rem' }}>
@@ -50,7 +54,21 @@ export function FilterBar({
               onChange={(e) => setInputVal(e.target.value)}
               style={{ padding: '1rem 3.5rem 1rem 1.5rem', fontSize: '1.1rem', borderRadius: '2rem', width: '100%' }}
             />
-            {inputVal && (
+            {isSearching ? (
+              <div 
+                style={{
+                  position: 'absolute',
+                  right: '1.4rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></div>
+              </div>
+            ) : inputVal && (
               <button
                 type="button"
                 onClick={handleClearSearch}
@@ -80,8 +98,20 @@ export function FilterBar({
               </button>
             )}
           </div>
-          <button type="submit" className="btn btn-primary" style={{ borderRadius: '2rem', padding: '0 2rem' }}>
-            Hledat
+          <button 
+            type="submit" 
+            disabled={isSearching}
+            className="btn btn-primary" 
+            style={{ borderRadius: '2rem', padding: '0 2rem', opacity: isSearching ? 0.8 : 1, minWidth: '120px' }}
+          >
+            {isSearching ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px', borderTopColor: '#fff' }}></div>
+                Hledám...
+              </span>
+            ) : (
+              'Hledat'
+            )}
           </button>
         </form>
       </div>

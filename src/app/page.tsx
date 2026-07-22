@@ -258,6 +258,7 @@ function CatalogContent() {
         onGenreChange={handleGenreChange}
         onSearchSubmit={handleSearchSubmit}
         type={typeParam}
+        loading={loading}
       />
 
       <div
@@ -270,10 +271,15 @@ function CatalogContent() {
           gap: '1rem',
         }}
       >
-        <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: 700 }}>
-          {qParam
-            ? `Výsledky vyhledávání pro "${qParam}"`
-            : `${genreParam === 'top' ? 'Populární' : genreParam} ${typeParam === 'movie' ? 'filmy' : 'seriály'}`}
+        <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {qParam ? (
+            <>
+              {loading && <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>}
+              {loading ? `Vyhledávám "${qParam}"...` : `Výsledky vyhledávání pro "${qParam}"`}
+            </>
+          ) : (
+            `${genreParam === 'top' ? 'Populární' : genreParam} ${typeParam === 'movie' ? 'filmy' : 'seriály'}`
+          )}
         </h2>
 
         <SortDropdown currentSort={sortParam} onSortChange={handleSortChange} />
