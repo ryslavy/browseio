@@ -16,7 +16,7 @@ export interface PluginManifest {
 export interface StreamSource {
   name: string;
   title: string;
-  url?: string;
+  url?: string | null;
   magnet?: string;
   infoHash?: string;
   size?: string;
