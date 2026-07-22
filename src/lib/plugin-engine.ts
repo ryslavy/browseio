@@ -1,5 +1,5 @@
 // Universal Plugin & Addon Engine for BrowseIO
-// Supports Stremio Addons & Nuvio Plugins via standard HTTP manifest/stream protocol
+// Supports Stremio Addons & Nuvio Executable JS Plugins via dynamic module runner
 
 export interface PluginManifest {
   id: string;
@@ -29,7 +29,6 @@ export interface StreamSource {
 
 const STORAGE_KEY = 'browseio_installed_plugins';
 
-// Default built-in plugins (Torrentio Stremio Addon)
 const DEFAULT_PLUGINS: PluginManifest[] = [
   {
     id: 'torrentio',
@@ -148,12 +147,95 @@ export async function fetchStreamsFromPlugin(
   type: string,
   id: string,
   season?: number,
-  episode?: number
+  episode?: number,
+  title?: string
 ): Promise<StreamSource[]> {
   if (!plugin.enabled) return [];
 
+  const baseUrl = plugin.manifestUrl.replace('/manifest.json', '').replace(/\/$/, '');
+
+  // Handle Nuvio JS Plugins
+  if (plugin.type === 'nuvio' || plugin.manifestUrl.includes('scrapelord')) {
+    try {
+      const mRes = await fetch(plugin.manifestUrl);
+      if (!mRes.ok) return [];
+      const manifest = await mRes.json();
+      const scrapers = manifest.scrapers || [];
+      if (!Array.isArray(scrapers) || scrapers.length === 0) return [];
+
+      const results: StreamSource[] = [];
+
+      await Promise.allSettled(
+        scrapers.map(async scraper => {
+          if (scraper.enabled === false) return;
+          try {
+            const jsUrl = `${baseUrl}/${scraper.filename}`;
+            const jsRes = await fetch(jsUrl);
+            if (!jsRes.ok) return;
+
+            const code = await jsRes.text();
+            const mod: any = { exports: {} };
+            const runner = new Function('module', 'exports', 'globalThis', code);
+            runner(mod, mod.exports, globalThis);
+
+            if (typeof mod.exports.getStreams === 'function') {
+              const raw = await mod.exports.getStreams({
+                tmdbId: id,
+                mediaType: type === 'series' ? 'tv' : 'movie',
+                season: season,
+                episode: episode,
+                title: title
+              });
+
+              if (Array.isArray(raw)) {
+                raw.forEach((s: any) => {
+                  const rawTitle = s.title || s.name || scraper.name || plugin.name;
+                  const titleParts = String(rawTitle).split('\n');
+                  const namePart = titleParts[0];
+                  const infoPart = titleParts.length > 1 ? titleParts[titleParts.length - 1] : '';
+
+                  let seeders = s.seeders || 0;
+                  let size = s.size || 'Unknown';
+
+                  const seedMatch = infoPart.match(/👤 (\d+)/);
+                  if (seedMatch) seeders = parseInt(seedMatch[1], 10);
+
+                  const sizeMatch = infoPart.match(/💾 ([0-9.]+ [A-Z]+)/);
+                  if (sizeMatch) size = sizeMatch[1];
+
+                  const magnet = s.url && s.url.startsWith('magnet:') ? s.url : (s.magnet || undefined);
+                  const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
+
+                  results.push({
+                    name: plugin.name,
+                    title: namePart,
+                    url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
+                    magnet: magnet,
+                    infoHash: infoHash,
+                    size: size,
+                    seeders: seeders,
+                    headers: s.behaviorHints?.proxyHeaders?.request,
+                    subtitles: s.subtitles,
+                    behaviorHints: s.behaviorHints
+                  });
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`Error running scraper ${scraper.name}:`, err);
+          }
+        })
+      );
+
+      return results;
+    } catch (e) {
+      console.error(`Error executing Nuvio plugin ${plugin.name}:`, e);
+      return [];
+    }
+  }
+
+  // Handle Stremio Addons
   try {
-    const baseUrl = plugin.manifestUrl.replace('/manifest.json', '').replace(/\/$/, '');
     const streamId = type === 'series' && season && episode ? `${id}:${season}:${episode}` : id;
     const requestUrl = `${baseUrl}/stream/${type}/${streamId}.json`;
 
@@ -182,7 +264,7 @@ export async function fetchStreamsFromPlugin(
       const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
 
       return {
-        name: s.name || plugin.name,
+        name: plugin.name,
         title: namePart,
         url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
         magnet: magnet,

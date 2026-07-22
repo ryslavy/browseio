@@ -126,7 +126,8 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     Promise.allSettled(
       activePlugins.map(async plugin => {
         try {
-          const rawStreams = await fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode);
+          const title = meta?.name || meta?.czTitle || meta?.originalTitle;
+          const rawStreams = await fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode, title);
           if (activeFetchIdRef.current !== fetchId || !rawStreams || rawStreams.length === 0) return;
 
           const processedStreams = await checkTorBoxCacheForSources(rawStreams);
@@ -351,12 +352,6 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     
     plugins.forEach(p => {
       providersMap.set(p.name, p.name);
-    });
-
-    sources.forEach(s => {
-      if (s.name) {
-        providersMap.set(s.name, s.name);
-      }
     });
 
     const result: { id: string; label: string }[] = [];
