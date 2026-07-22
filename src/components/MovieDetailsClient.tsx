@@ -351,12 +351,25 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
   const availableProviders = useMemo(() => {
     const plugins = getInstalledPlugins().filter(p => p.enabled);
-    const providers = [{ id: 'all', label: 'Všechny' }];
+    const providersMap = new Map<string, string>();
+    providersMap.set('all', 'Všechny');
+    
     plugins.forEach(p => {
-      providers.push({ id: p.name, label: p.name });
+      providersMap.set(p.name, p.name);
     });
-    return providers;
-  }, []);
+
+    sources.forEach(s => {
+      if (s.name) {
+        providersMap.set(s.name, s.name);
+      }
+    });
+
+    const result: { id: string; label: string }[] = [];
+    providersMap.forEach((label, id) => {
+      result.push({ id: id, label: label });
+    });
+    return result;
+  }, [sources]);
 
   const getFilteredSources = () => {
     if (sourceFilter === 'all') return sources;
