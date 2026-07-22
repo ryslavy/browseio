@@ -40,36 +40,46 @@ export function FilterBar({
   return (
     <div style={{ marginBottom: '2rem' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto 2rem' }}>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '0.5rem', position: 'relative' }}>
-          <input
-            type="text"
-            className="input"
-            placeholder={`Hledat ${type === 'movie' ? 'film' : 'seriál'}...`}
-            value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
-            style={{ padding: '1rem 1.5rem', fontSize: '1.1rem', borderRadius: '2rem', flex: 1 }}
-          />
-          {inputVal && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              style={{
-                position: 'absolute',
-                right: '7.5rem',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: '1.2rem',
-                padding: '0.2rem 0.5rem',
-              }}
-              title="Vymazat hledání"
-            >
-              ✕
-            </button>
-          )}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+            <input
+              type="text"
+              className="input"
+              placeholder={`Hledat ${type === 'movie' ? 'film' : 'seriál'}...`}
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              style={{ padding: '1rem 3rem 1rem 1.5rem', fontSize: '1.1rem', borderRadius: '2rem', width: '100%' }}
+            />
+            {inputVal && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                style={{
+                  position: 'absolute',
+                  right: '1rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '26px',
+                  height: '26px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  lineHeight: 1,
+                  padding: 0,
+                  transition: 'background 0.2s ease',
+                }}
+                title="Vymazat hledání"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <button type="submit" className="btn btn-primary" style={{ borderRadius: '2rem', padding: '0 2rem' }}>
             Hledat
           </button>

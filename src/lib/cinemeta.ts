@@ -57,15 +57,25 @@ export async function searchCinemeta(query: string, type: 'movie' | 'series' = '
     ]);
 
     const cinemetaMetas: MetaItem[] = cinemetaRes.status === 'fulfilled' && cinemetaRes.value?.metas ? cinemetaRes.value.metas : [];
-    const tmdbResults: any[] = tmdbRes.status === 'fulfilled' && tmdbRes.value?.results ? tmdbRes.value.results.slice(0, 10) : [];
+    const tmdbResults: any[] = tmdbRes.status === 'fulfilled' && tmdbRes.value?.results ? tmdbRes.value.results.slice(0, 5) : [];
 
-    // Resolve IMDb IDs for TMDB search results
+    // Resolve IMDb IDs for top TMDB search results using in-memory cache
     const tmdbMetas: MetaItem[] = [];
     if (tmdbResults.length > 0) {
       const extIds = await Promise.allSettled(
-        tmdbResults.map(item => 
-          fetch(`https://api.themoviedb.org/3/${tmdbType}/${item.id}/external_ids?api_key=${TMDB_API_KEY}`).then(r => r.json())
-        )
+        tmdbResults.map(item => {
+          const cacheKey = `${tmdbType}_${item.id}`;
+          if (extIdCache.has(cacheKey)) {
+            return Promise.resolve({ imdb_id: extIdCache.get(cacheKey) });
+          }
+          return fetch(`https://api.themoviedb.org/3/${tmdbType}/${item.id}/external_ids?api_key=${TMDB_API_KEY}`)
+            .then(r => r.json())
+            .then(data => {
+              const id = data?.imdb_id || null;
+              extIdCache.set(cacheKey, id);
+              return { imdb_id: id };
+            });
+        })
       );
 
       for (let i = 0; i < tmdbResults.length; i++) {
