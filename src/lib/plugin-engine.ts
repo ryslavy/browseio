@@ -149,7 +149,8 @@ export async function fetchStreamsFromPlugin(
   type: string,
   id: string,
   season?: number,
-  episode?: number
+  episode?: number,
+  title?: string
 ): Promise<StreamSource[]> {
   if (!plugin.enabled) return [];
 
@@ -159,8 +160,8 @@ export async function fetchStreamsFromPlugin(
       const sktorrentScraper = (await import('@/lib/sktorrent-scraper')).default;
 
       const [hellspyStreams, sktorrentStreams] = await Promise.allSettled([
-        hellspyScraper.getStreams({ tmdbId: id, mediaType: type, season, episode }),
-        sktorrentScraper.getStreams({ tmdbId: id, mediaType: type, season, episode })
+        hellspyScraper.getStreams({ tmdbId: id, mediaType: type, season, episode, title }),
+        sktorrentScraper.getStreams({ tmdbId: id, mediaType: type, season, episode, title })
       ]);
 
       const results: StreamSource[] = [];
