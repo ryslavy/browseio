@@ -51,58 +51,40 @@ export async function searchCinemeta(query: string, type: 'movie' | 'series' = '
   try {
     const tmdbType = type === 'series' ? 'tv' : 'movie';
     
-    // Fetch Cinemeta search + TMDB Czech search in parallel
+    // Single parallel round-trip for Cinemeta search + TMDB Czech search
     const [cinemetaRes, tmdbRes] = await Promise.allSettled([
       fetch(`https://v3-cinemeta.strem.io/catalog/${type}/top/search=${encodeURIComponent(query)}.json`).then(r => r.json()),
       fetch(`https://api.themoviedb.org/3/search/${tmdbType}?api_key=${TMDB_API_KEY}&language=cs-CZ&query=${encodeURIComponent(query)}`).then(r => r.json())
     ]);
 
     const cinemetaMetas: MetaItem[] = cinemetaRes.status === 'fulfilled' && cinemetaRes.value?.metas ? cinemetaRes.value.metas : [];
-    const tmdbResults: any[] = tmdbRes.status === 'fulfilled' && tmdbRes.value?.results ? tmdbRes.value.results.slice(0, 5) : [];
+    const tmdbResults: any[] = tmdbRes.status === 'fulfilled' && tmdbRes.value?.results ? tmdbRes.value.results.slice(0, 10) : [];
 
-    // Resolve IMDb IDs for top TMDB search results using in-memory cache
-    const tmdbMetas: MetaItem[] = [];
-    if (tmdbResults.length > 0) {
-      const extIds = await Promise.allSettled(
-        tmdbResults.map(item => {
-          const cacheKey = `${tmdbType}_${item.id}`;
-          if (extIdCache.has(cacheKey)) {
-            return Promise.resolve({ imdb_id: extIdCache.get(cacheKey) });
-          }
-          return fetch(`https://api.themoviedb.org/3/${tmdbType}/${item.id}/external_ids?api_key=${TMDB_API_KEY}`)
-            .then(r => r.json())
-            .then(data => {
-              const id = data?.imdb_id || null;
-              extIdCache.set(cacheKey, id);
-              return { imdb_id: id };
-            });
-        })
+    // Map TMDB search results instantly without secondary network calls
+    const tmdbMetas: MetaItem[] = tmdbResults.map(item => {
+      const year = (item.release_date || item.first_air_date || '').split('-')[0];
+      const czName = item.title || item.name;
+      const origName = item.original_title || item.original_name;
+
+      // Try to find matching IMDb ID from cinemetaMetas if available
+      const cinemetaMatch = cinemetaMetas.find(cm => 
+        cm.name?.toLowerCase() === czName?.toLowerCase() || 
+        cm.name?.toLowerCase() === origName?.toLowerCase()
       );
 
-      for (let i = 0; i < tmdbResults.length; i++) {
-        const item = tmdbResults[i];
-        const extRes = extIds[i];
-        const imdbId = extRes.status === 'fulfilled' && extRes.value?.imdb_id ? extRes.value.imdb_id : null;
-        
-        if (imdbId) {
-          const year = (item.release_date || item.first_air_date || '').split('-')[0];
-          const czName = item.title || item.name;
-          const origName = item.original_title || item.original_name;
-          tmdbMetas.push({
-            id: imdbId,
-            type: type,
-            name: czName || origName,
-            czTitle: czName,
-            originalTitle: origName,
-            poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined,
-            background: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : undefined,
-            description: item.overview || '',
-            releaseInfo: year,
-            imdbRating: item.vote_average ? String(item.vote_average.toFixed(1)) : undefined
-          });
-        }
-      }
-    }
+      return {
+        id: cinemetaMatch ? cinemetaMatch.id : `tmdb_${item.id}`,
+        type: type,
+        name: czName || origName,
+        czTitle: czName,
+        originalTitle: origName,
+        poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined,
+        background: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : undefined,
+        description: item.overview || '',
+        releaseInfo: year,
+        imdbRating: item.vote_average ? String(item.vote_average.toFixed(1)) : undefined
+      };
+    });
 
     // Merge TMDB metas (Czech search matches) first, then Cinemeta search results, avoiding duplicates
     const seenIds = new Set<string>();
@@ -132,13 +114,28 @@ export async function searchCinemeta(query: string, type: 'movie' | 'series' = '
 export async function getMetaDetails(type: string, id: string): Promise<MetaItem | null> {
   try {
     const tmdbType = type === 'series' ? 'tv' : 'movie';
-    const isImdb = id.startsWith('tt');
+    let realId = id;
+
+    // If ID is tmdb_12345, resolve the IMDb ID first
+    if (id.startsWith('tmdb_')) {
+      const numericId = id.replace('tmdb_', '');
+      try {
+        const extRes = await fetch(`https://api.themoviedb.org/3/${tmdbType}/${numericId}/external_ids?api_key=${TMDB_API_KEY}`).then(r => r.json());
+        if (extRes?.imdb_id) {
+          realId = extRes.imdb_id;
+        }
+      } catch (e) {
+        console.error('Failed to resolve TMDB external ID:', e);
+      }
+    }
+
+    const isImdb = realId.startsWith('tt');
     const tmdbUrl = isImdb
-      ? `https://api.themoviedb.org/3/find/${id}?api_key=${TMDB_API_KEY}&external_source=imdb_id&language=cs-CZ`
-      : `https://api.themoviedb.org/3/${tmdbType}/${id}?api_key=${TMDB_API_KEY}&language=cs-CZ`;
+      ? `https://api.themoviedb.org/3/find/${realId}?api_key=${TMDB_API_KEY}&external_source=imdb_id&language=cs-CZ`
+      : `https://api.themoviedb.org/3/${tmdbType}/${realId}?api_key=${TMDB_API_KEY}&language=cs-CZ`;
 
     const [cinemetaRes, tmdbRes] = await Promise.allSettled([
-      fetch(`https://v3-cinemeta.strem.io/meta/${type}/${id}.json`).then(r => r.json()),
+      fetch(`https://v3-cinemeta.strem.io/meta/${type}/${realId}.json`).then(r => r.json()),
       fetch(tmdbUrl).then(r => r.json())
     ]);
 
@@ -162,9 +159,9 @@ export async function getMetaDetails(type: string, id: string): Promise<MetaItem
     if (!meta) {
       if (czTitle || originalTitle) {
         return {
-          id: id,
+          id: realId,
           type: type,
-          name: czTitle || originalTitle || id,
+          name: czTitle || originalTitle || realId,
           czTitle: czTitle,
           originalTitle: originalTitle
         };
