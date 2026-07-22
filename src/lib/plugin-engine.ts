@@ -23,6 +23,8 @@ export interface StreamSource {
   seeders?: number;
   isTorBoxCached?: boolean;
   headers?: Record<string, string>;
+  subtitles?: any[];
+  behaviorHints?: any;
 }
 
 const STORAGE_KEY = 'browseio_installed_plugins';
@@ -91,21 +93,42 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
 
   const res = await fetch(cleanUrl);
   if (!res.ok) {
-    throw new Error(`Plugin URL is unreachable (${res.status})`);
+    throw new Error(`Doplněk na zadané URL neodpovídá (HTTP ${res.status})`);
   }
 
-  const manifest = await res.json();
-  if (!manifest.id || !manifest.name) {
-    throw new Error('Invalid plugin manifest: missing id or name');
+  const text = await res.text();
+  let manifest: any = {};
+
+  try {
+    manifest = JSON.parse(text);
+  } catch (e) {
+    try {
+      let fixedText = text.trim().replace(/,\s*$/, '');
+      if (!fixedText.endsWith('}')) {
+        if (!fixedText.includes(']')) fixedText += ']}';
+        else fixedText += '}';
+      }
+      manifest = JSON.parse(fixedText);
+    } catch {
+      const nameMatch = text.match(/"name"\s*:\s*"([^"]+)"/);
+      const idMatch = text.match(/"id"\s*:\s*"([^"]+)"/);
+      manifest = {
+        id: idMatch ? idMatch[1] : `nuvio_${Date.now()}`,
+        name: nameMatch ? nameMatch[1] : 'Nuvio Plugin',
+        nuvio: true
+      };
+    }
   }
 
-  const isNuvio = Boolean(manifest.nuvio) || Boolean(manifest.pluginType === 'nuvio');
+  const id = manifest.id || (manifest.scrapers && manifest.scrapers[0]?.id) || `plugin_${Date.now()}`;
+  const name = manifest.name || (manifest.scrapers && manifest.scrapers[0]?.name) || 'Klientský Doplněk';
+  const isNuvio = Boolean(manifest.nuvio) || Boolean(manifest.scrapers) || Boolean(manifest.pluginType === 'nuvio');
 
   const newPlugin: PluginManifest = {
-    id: manifest.id,
-    name: manifest.name,
+    id: id,
+    name: name,
     version: manifest.version || '1.0.0',
-    description: manifest.description || 'Custom addon',
+    description: manifest.description || (manifest.scrapers && manifest.scrapers[0]?.description) || 'Doplněk pro načítání streamů',
     icon: manifest.icon || manifest.logo,
     type: isNuvio ? 'nuvio' : 'stremio',
     manifestUrl: cleanUrl,
@@ -129,6 +152,30 @@ export async function fetchStreamsFromPlugin(
   episode?: number
 ): Promise<StreamSource[]> {
   if (!plugin.enabled) return [];
+
+  if (plugin.type === 'nuvio') {
+    try {
+      const hellspyScraper = (await import('@/lib/hellspy-scraper')).default;
+      const sktorrentScraper = (await import('@/lib/sktorrent-scraper')).default;
+
+      const [hellspyStreams, sktorrentStreams] = await Promise.allSettled([
+        hellspyScraper.getStreams({ tmdbId: id, mediaType: type, season, episode }),
+        sktorrentScraper.getStreams({ tmdbId: id, mediaType: type, season, episode })
+      ]);
+
+      const results: StreamSource[] = [];
+      if (hellspyStreams.status === 'fulfilled' && Array.isArray(hellspyStreams.value)) {
+        results.push(...hellspyStreams.value);
+      }
+      if (sktorrentStreams.status === 'fulfilled' && Array.isArray(sktorrentStreams.value)) {
+        results.push(...sktorrentStreams.value);
+      }
+      return results;
+    } catch (e) {
+      console.error(`Error executing Nuvio scrapers for ${plugin.name}:`, e);
+      return [];
+    }
+  }
 
   try {
     const baseUrl = plugin.manifestUrl.replace('/manifest.json', '').replace(/\/$/, '');
@@ -167,7 +214,9 @@ export async function fetchStreamsFromPlugin(
         infoHash: infoHash,
         size: size,
         seeders: seeders,
-        headers: s.behaviorHints?.proxyHeaders?.request
+        headers: s.behaviorHints?.proxyHeaders?.request,
+        subtitles: s.subtitles,
+        behaviorHints: s.behaviorHints
       };
     });
   } catch (e) {

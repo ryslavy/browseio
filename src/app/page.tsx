@@ -297,6 +297,82 @@ function CatalogContent() {
   );
 }
 
+import MovieDetailsClient from '@/components/MovieDetailsClient';
+import SettingsPage from '@/app/settings/page';
+
+function useCurrentView() {
+  const [view, setView] = useState<{ type: 'catalog' | 'settings' | 'movie'; mediaType?: string; id?: string }>({ type: 'catalog' });
+
+  useEffect(() => {
+    function updateView() {
+      if (typeof window === 'undefined') return;
+      let path = window.location.pathname;
+      const search = window.location.search;
+      const hash = window.location.hash;
+      const sp = new URLSearchParams(search);
+
+      const redirectPath = sp.get('p');
+      if (redirectPath) {
+        const decodedPath = redirectPath.replace(/~and~/g, '&');
+        path = '/' + decodedPath;
+        const base = window.location.pathname.replace(/\/$/, '');
+        const cleanUrl = (base + '/' + decodedPath).replace(/\/\//g, '/');
+        window.history.replaceState(null, '', cleanUrl);
+      }
+
+      if (path.includes('/settings') || hash.includes('settings') || sp.get('page') === 'settings') {
+        setView({ type: 'settings' });
+        return;
+      }
+
+      const movieMatch = path.match(/\/movie\/([^/]+)\/([^/]+)/) || hash.match(/movie\/([^/]+)\/([^/]+)/);
+      if (movieMatch) {
+        setView({ type: 'movie', mediaType: movieMatch[1], id: movieMatch[2] });
+        return;
+      }
+
+      const idParam = sp.get('id');
+      if (idParam) {
+        setView({ type: 'movie', mediaType: sp.get('type') || 'movie', id: idParam });
+        return;
+      }
+
+      setView({ type: 'catalog' });
+    }
+
+    updateView();
+    window.addEventListener('popstate', updateView);
+    window.addEventListener('hashchange', updateView);
+
+    const originalPushState = history.pushState;
+    history.pushState = function (...args) {
+      originalPushState.apply(this, args);
+      updateView();
+    };
+    return () => {
+      window.removeEventListener('popstate', updateView);
+      window.removeEventListener('hashchange', updateView);
+      history.pushState = originalPushState;
+    };
+  }, []);
+
+  return view;
+}
+
+function HomeContent() {
+  const view = useCurrentView();
+
+  if (view.type === 'settings') {
+    return <SettingsPage />;
+  }
+
+  if (view.type === 'movie' && view.id) {
+    return <MovieDetailsClient type={view.mediaType || 'movie'} id={view.id} />;
+  }
+
+  return <CatalogContent />;
+}
+
 export default function Home() {
   return (
     <Suspense
@@ -306,7 +382,7 @@ export default function Home() {
         </div>
       }
     >
-      <CatalogContent />
+      <HomeContent />
     </Suspense>
   );
 }

@@ -22,10 +22,28 @@ interface MediaSource {
   isTorBoxCached?: boolean;
 }
 
-export default function MovieDetailsClient() {
+interface MovieDetailsClientProps {
+  type?: string;
+  id?: string;
+}
+
+export default function MovieDetailsClient({ type: propType, id: propId }: MovieDetailsClientProps = {}) {
   const params = useParams();
   const router = useRouter();
-  const { type, id } = params;
+
+  const [searchId, setSearchId] = useState<string>('');
+  const [searchType, setSearchType] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      setSearchId(sp.get('id') || '');
+      setSearchType(sp.get('type') || '');
+    }
+  }, []);
+
+  const id = propId || (params?.id as string) || searchId || '';
+  const type = propType || (params?.type as string) || searchType || 'movie';
 
   const [meta, setMeta] = useState<MetaItem | null>(null);
   const [sources, setSources] = useState<MediaSource[]>([]);
