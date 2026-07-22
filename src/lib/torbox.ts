@@ -135,3 +135,33 @@ export async function resolveTorBoxStreamUrl(magnetOrHash: string, apiKey: strin
 
   return null;
 }
+
+export async function cacheTorBoxTorrent(magnetOrHash: string, apiKey: string): Promise<{ success: boolean; message: string }> {
+  if (!apiKey) return { success: false, message: 'Chybí TorBox API klíč' };
+  const magnetUrl = magnetOrHash.startsWith('magnet:') ? magnetOrHash : `magnet:?xt=urn:btih:${magnetOrHash}`;
+
+  try {
+    const bodyData = new URLSearchParams();
+    bodyData.append('magnet', magnetUrl);
+    bodyData.append('seed', '1');
+    bodyData.append('allow_zip', 'false');
+
+    const res = await fetch(`${TORBOX_API_BASE}/torrents/createtorrent`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: bodyData
+    });
+
+    const json = await res.json();
+    if (json.success) {
+      return { success: true, message: json.detail || 'Torrent byl přidán do TorBoxu ke stažení!' };
+    } else {
+      return { success: false, message: json.detail || 'Nepodařilo se přidat torrent do TorBoxu' };
+    }
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Chyba při komunikaci s TorBox API' };
+  }
+}
