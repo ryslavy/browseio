@@ -356,7 +356,14 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
     sources.forEach(s => {
       if (s.name) {
-        providersMap.set(s.name, s.name);
+        let cleanName = s.name;
+        if (/hellspy/i.test(s.name)) cleanName = 'HellSpy';
+        else if (/sktorrent/i.test(s.name)) cleanName = 'SkTorrent';
+        else if (/sktonline/i.test(s.name)) cleanName = 'SkTonline';
+        else if (/torrentio/i.test(s.name)) cleanName = 'Torrentio';
+        else if (s.name.length > 20) cleanName = s.name.slice(0, 18) + '...';
+
+        providersMap.set(cleanName, cleanName);
       }
     });
 
@@ -373,6 +380,10 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
        if (sourceFilter === 'TorBox' && s.isTorBoxCached) return true;
        if (s.name && s.name.toLowerCase().includes(sourceFilter.toLowerCase())) return true;
        if (s.name && sourceFilter.toLowerCase().includes(s.name.toLowerCase())) return true;
+       if (sourceFilter === 'HellSpy' && /hellspy/i.test(s.name || '')) return true;
+       if (sourceFilter === 'SkTorrent' && /sktorrent/i.test(s.name || '')) return true;
+       if (sourceFilter === 'SkTonline' && /sktonline/i.test(s.name || '')) return true;
+       if (sourceFilter === 'Torrentio' && /torrentio/i.test(s.name || '')) return true;
        return false;
     });
   };
