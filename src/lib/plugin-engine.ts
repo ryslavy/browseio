@@ -1,5 +1,5 @@
 // Universal Plugin & Addon Engine for BrowseIO
-// Supports Stremio Addons, Nuvio Plugins, and Custom HTTP Scrapers
+// Supports Stremio Addons & Nuvio Plugins via standard HTTP manifest/stream protocol
 
 export interface PluginManifest {
   id: string;
@@ -53,7 +53,6 @@ export function getInstalledPlugins(): PluginManifest[] {
     }
     const parsed: PluginManifest[] = JSON.parse(raw);
     
-    // Ensure built-in plugins exist
     const pluginIds = new Set(parsed.map(p => p.id));
     let updated = [...parsed];
     let changed = false;
@@ -149,34 +148,9 @@ export async function fetchStreamsFromPlugin(
   type: string,
   id: string,
   season?: number,
-  episode?: number,
-  title?: string
+  episode?: number
 ): Promise<StreamSource[]> {
   if (!plugin.enabled) return [];
-
-  if (plugin.type === 'nuvio') {
-    try {
-      const hellspyScraper = (await import('@/lib/hellspy-scraper')).default;
-      const sktorrentScraper = (await import('@/lib/sktorrent-scraper')).default;
-
-      const [hellspyStreams, sktorrentStreams] = await Promise.allSettled([
-        hellspyScraper.getStreams({ tmdbId: id, mediaType: type, season, episode, title }),
-        sktorrentScraper.getStreams({ tmdbId: id, mediaType: type, season, episode, title })
-      ]);
-
-      const results: StreamSource[] = [];
-      if (hellspyStreams.status === 'fulfilled' && Array.isArray(hellspyStreams.value)) {
-        results.push(...hellspyStreams.value);
-      }
-      if (sktorrentStreams.status === 'fulfilled' && Array.isArray(sktorrentStreams.value)) {
-        results.push(...sktorrentStreams.value);
-      }
-      return results;
-    } catch (e) {
-      console.error(`Error executing Nuvio scrapers for ${plugin.name}:`, e);
-      return [];
-    }
-  }
 
   try {
     const baseUrl = plugin.manifestUrl.replace('/manifest.json', '').replace(/\/$/, '');

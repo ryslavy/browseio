@@ -147,7 +147,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     };
 
     activePlugins.forEach(plugin => {
-      fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode, meta?.name)
+      fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode)
         .then(streams => handleProviderResult(streams))
         .catch(() => handleProviderResult([]));
     });
