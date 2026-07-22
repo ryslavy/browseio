@@ -92,9 +92,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     const torboxApiKey = localStorage.getItem('torbox_api_key');
     const activePlugins = getInstalledPlugins().filter(p => p.enabled);
 
-    let pendingProviders = activePlugins.length;
-
-    if (pendingProviders === 0) {
+    if (activePlugins.length === 0) {
       setFetchingStreams(false);
       return;
     }
@@ -125,31 +123,28 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       return newSources;
     };
 
-    const handleProviderResult = async (rawStreams: MediaSource[]) => {
-      if (activeFetchIdRef.current !== fetchId) return;
-      if (!rawStreams || rawStreams.length === 0) {
-        pendingProviders--;
-        if (pendingProviders <= 0) setFetchingStreams(false);
-        return;
-      }
+    Promise.allSettled(
+      activePlugins.map(async plugin => {
+        try {
+          const rawStreams = await fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode);
+          if (activeFetchIdRef.current !== fetchId || !rawStreams || rawStreams.length === 0) return;
 
-      const processedStreams = await checkTorBoxCacheForSources(rawStreams);
-
+          const processedStreams = await checkTorBoxCacheForSources(rawStreams);
+          if (activeFetchIdRef.current === fetchId) {
+            setSources(prev => {
+              const existing = new Set(prev.map(s => s.url || s.magnet || s.title));
+              const fresh = processedStreams.filter(s => !existing.has(s.url || s.magnet || s.title));
+              return [...prev, ...fresh];
+            });
+          }
+        } catch (e) {
+          console.error(`Error loading streams from ${plugin.name}:`, e);
+        }
+      })
+    ).finally(() => {
       if (activeFetchIdRef.current === fetchId) {
-        setSources(prev => {
-          const existing = new Set(prev.map(s => s.url || s.magnet || s.title));
-          const fresh = processedStreams.filter(s => !existing.has(s.url || s.magnet || s.title));
-          return [...prev, ...fresh];
-        });
-        pendingProviders--;
-        if (pendingProviders <= 0) setFetchingStreams(false);
+        setFetchingStreams(false);
       }
-    };
-
-    activePlugins.forEach(plugin => {
-      fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode)
-        .then(streams => handleProviderResult(streams))
-        .catch(() => handleProviderResult([]));
     });
 
   }, [type, id, selectedSeason, selectedEpisode]);
