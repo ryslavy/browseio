@@ -23,6 +23,7 @@ export interface MetaItem {
 }
 
 const TMDB_API_KEY = '4219e299c89411838049ab0dab19ebd5';
+const extIdCache = new Map<string, string | null>();
 
 export async function getCatalog(type: 'movie' | 'series', category: string = 'top', skip: number = 0): Promise<MetaItem[]> {
   try {
