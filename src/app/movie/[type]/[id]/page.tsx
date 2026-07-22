@@ -218,6 +218,61 @@ export default function MovieDetails() {
     }
   };
 
+  const handleDownload = async (source: MediaSource) => {
+    const torboxApiKey = localStorage.getItem('torbox_api_key');
+    const { infoHash, magnet, url, isTorBoxCached } = source;
+    const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+
+    // 1. TorBox Debrid download
+    if (isTorBoxCached && torboxApiKey) {
+      try {
+        const targetMagnet = magnet || `magnet:?xt=urn:btih:${targetHash}`;
+        const res = await fetch('/api/torbox', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            action: 'resolve', 
+            magnet: targetMagnet, 
+            apiKey: torboxApiKey,
+            season: selectedSeason,
+            episode: selectedEpisode
+          })
+        });
+        const data = await res.json();
+        if (data.url && typeof data.url === 'string' && data.url.startsWith('http')) {
+          const a = document.createElement('a');
+          a.href = data.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.click();
+          return;
+        }
+      } catch (e) {
+        console.error('TorBox download resolution failed:', e);
+      }
+    }
+
+    // 2. Direct HTTP URL download (Hellspy / direct streams)
+    if (url && url.startsWith('http')) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.download = '';
+      a.click();
+      return;
+    }
+
+    // 3. Magnet link for P2P torrents
+    const magnetUrl = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
+    if (magnetUrl) {
+      window.location.href = magnetUrl;
+      return;
+    }
+
+    alert('Stahování pro tento zdroj není k dispozici.');
+  };
+
   const [playerIdle, setPlayerIdle] = useState(false);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -440,9 +495,14 @@ export default function MovieDetails() {
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {source.isTorBoxCached && (
-                    <button onClick={() => handlePlay(source, 'debrid')} className="btn btn-primary" style={{ backgroundColor: '#eab308', color: '#000', fontWeight: 600 }}>
-                      🟣 Přehrát v PotPlayeru (Debrid)
-                    </button>
+                    <>
+                      <button onClick={() => handlePlay(source, 'debrid')} className="btn btn-primary" style={{ backgroundColor: '#eab308', color: '#000', fontWeight: 600 }}>
+                        🟣 Přehrát v PotPlayeru (Debrid)
+                      </button>
+                      <button onClick={() => handleDownload(source)} className="btn btn-secondary" style={{ border: '1px solid rgba(234, 179, 8, 0.4)', color: '#eab308' }}>
+                        ⬇️ Stáhnout (Debrid)
+                      </button>
+                    </>
                   )}
                   {(!source.magnet && !source.infoHash) && (
                     <>
@@ -452,12 +512,17 @@ export default function MovieDetails() {
                       <button onClick={() => handlePlay(source, 'potplayer')} className="btn btn-secondary">
                         🟣 PotPlayer
                       </button>
+                      <button onClick={() => handleDownload(source)} className="btn btn-secondary">
+                        ⬇️ Stáhnout
+                      </button>
                     </>
                   )}
                   {(source.magnet || source.infoHash) && !source.isTorBoxCached && (
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontStyle: 'italic', display: 'flex', alignItems: 'center' }}>
-                      Není v TorBox cache. Potřeba stáhnout ručně.
-                    </span>
+                    <>
+                      <button onClick={() => handleDownload(source)} className="btn btn-secondary">
+                        📥 Stáhnout (Magnet)
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
