@@ -5,6 +5,7 @@ import { getInstalledPlugins, savePlugins, installPluginFromUrl, PluginManifest 
 
 export default function SettingsPage() {
   const [torboxKey, setTorboxKey] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('torbox_api_key') || '' : ''));
+  const [corsProxy, setCorsProxy] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') || '' : ''));
   const [saved, setSaved] = useState(false);
 
   // Plugins State
@@ -20,6 +21,7 @@ export default function SettingsPage() {
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('torbox_api_key', torboxKey);
+    localStorage.setItem('custom_cors_proxy', corsProxy);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -95,84 +97,103 @@ export default function SettingsPage() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <h4 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Nainstalované doplňky ({plugins.length})</h4>
-          {plugins.map(p => (
-            <div 
-              key={p.id} 
-              style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                padding: '1rem', 
-                backgroundColor: 'rgba(255, 255, 255, 0.03)', 
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '12px',
-                gap: '1rem'
-              }}
-            >
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                  <strong style={{ fontSize: '1rem' }}>{p.name}</strong>
-                  <span style={{ fontSize: '0.75rem', backgroundColor: p.type === 'nuvio' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)', color: p.type === 'nuvio' ? '#c084fc' : '#60a5fa', padding: '0.1rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
-                    {p.type === 'nuvio' ? 'Nuvio Plugin' : 'Stremio Addon'}
-                  </span>
-                  {p.isBuiltIn && (
-                    <span style={{ fontSize: '0.75rem', backgroundColor: 'rgba(234, 179, 8, 0.2)', color: '#eab308', padding: '0.1rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
-                      Vestavěný
-                    </span>
-                  )}
-                </div>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{p.description || p.manifestUrl}</p>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button 
-                  type="button" 
-                  onClick={() => handleTogglePlugin(p.id)} 
-                  className={`glass-pill ${p.enabled ? 'active' : ''}`}
-                  style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}
-                >
-                  {p.enabled ? 'Povoleno' : 'Vypnuto'}
-                </button>
-                {!p.isBuiltIn && (
-                  <button 
-                    type="button" 
-                    onClick={() => handleRemovePlugin(p.id)} 
-                    className="btn btn-secondary"
-                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', color: 'var(--danger-color)' }}
-                    title="Odebrat doplněk"
-                  >
-                    🗑️
-                  </button>
-                )}
-              </div>
+          {plugins.length === 0 ? (
+            <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '0.5rem 0' }}>
+              Zatím nemáte nainstalované žádné doplňky. Přidejte doplněk výše!
             </div>
-          ))}
+          ) : (
+            plugins.map(p => (
+              <div 
+                key={p.id} 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  padding: '0.75rem 1rem', 
+                  backgroundColor: 'rgba(255,255,255,0.03)', 
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.05)'
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{p.name} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>v{p.version || '1.0'}</span></div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{p.description || p.manifestUrl}</div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button 
+                    onClick={() => handleTogglePlugin(p.id)}
+                    className="btn"
+                    style={{ 
+                      fontSize: '0.8rem', 
+                      padding: '0.3rem 0.6rem',
+                      backgroundColor: p.enabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.1)',
+                      color: p.enabled ? '#10b981' : 'var(--text-secondary)'
+                    }}
+                  >
+                    {p.enabled ? 'Aktivní' : 'Vypnuto'}
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleRemovePlugin(p.id)}
+                    className="btn"
+                    style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
+                  >
+                    Smazat
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
-      <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '12px' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#eab308' }}>⚡ TorBox Debrid Integration</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-            Zadejte váš API klíč z TorBox.app pro bleskové přehrávání cached torrentů bez čekání na seedery.
-          </p>
+      {/* 2. Proxy & TorBox Integration */}
+      <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--accent-color)' }}>
+          ⚡ Vlastní CORS Proxy a TorBox Klíč
+        </h3>
+        
+        <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>TorBox API Key</label>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+              Vlastní CORS Proxy URL (volitelné)
+            </label>
+            <input 
+              type="text" 
+              value={corsProxy} 
+              onChange={(e) => setCorsProxy(e.target.value)} 
+              placeholder="např. https://moje-proxy.workers.dev/?"
+              className="input"
+              style={{ width: '100%' }}
+            />
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
+              Umožňuje obcházet blokování klientských scraperů v prohlížeči. Zadejte URL vašeho Cloudflare Workeru nebo lokálního proxy serveru.
+            </p>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+              TorBox API Klíč (Debrid)
+            </label>
             <input 
               type="password" 
               value={torboxKey} 
               onChange={(e) => setTorboxKey(e.target.value)} 
-              placeholder="Vložte váš TorBox API Token"
+              placeholder="Vložte váš TorBox API Key..."
               className="input"
               style={{ width: '100%' }}
             />
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
+              Pokud zadejte API klíč pro TorBox, aplikace bude automaticky ověřovat a oznamovat, které torrent streamy jsou již kešky (instant play).
+            </p>
           </div>
-        </div>
 
-        <button type="submit" className="btn btn-primary" style={{ padding: '1rem', fontSize: '1.1rem', fontWeight: 600 }}>
-          Uložit nastavení
-        </button>
-      </form>
+          <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
+            💾 Uložit nastavení
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

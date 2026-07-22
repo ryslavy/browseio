@@ -122,10 +122,18 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     return fetch(input, init);
   }
 
-  const corsProxies = [
+  const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
+  const corsProxies: ((u: string) => string)[] = [];
+
+  if (customProxy && customProxy.trim()) {
+    const cp = customProxy.trim();
+    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
+  }
+
+  corsProxies.push(
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
-  ];
+  );
 
   for (const proxyFn of corsProxies) {
     try {
