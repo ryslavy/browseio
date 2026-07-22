@@ -207,7 +207,7 @@ export async function fetchStreamsFromPlugin(
                   const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
 
                   results.push({
-                    name: plugin.name,
+                    name: s.name || scraper.name || plugin.name,
                     title: namePart,
                     url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
                     magnet: magnet,

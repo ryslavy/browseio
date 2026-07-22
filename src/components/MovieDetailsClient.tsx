@@ -354,6 +354,12 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       providersMap.set(p.name, p.name);
     });
 
+    sources.forEach(s => {
+      if (s.name) {
+        providersMap.set(s.name, s.name);
+      }
+    });
+
     const result: { id: string; label: string }[] = [];
     providersMap.forEach((label, id) => {
       result.push({ id: id, label: label });
@@ -366,6 +372,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     return sources.filter(s => {
        if (sourceFilter === 'TorBox' && s.isTorBoxCached) return true;
        if (s.name && s.name.toLowerCase().includes(sourceFilter.toLowerCase())) return true;
+       if (s.name && sourceFilter.toLowerCase().includes(s.name.toLowerCase())) return true;
        return false;
     });
   };
