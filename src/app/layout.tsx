@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
   title: 'BrowseIO - Stream Player',
-  description: 'Stream torrents and media directly using Cinemeta, Torrentio and SKTorrent',
+  description: 'Vyhledávejte a přehrávejte filmy a seriály pomocí doplňků.',
 };
 
 export default function RootLayout({
@@ -41,7 +41,6 @@ export default function RootLayout({
         </main>
 
         <footer style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-          <p>© 2026 BrowseIO. Využívá Cinemeta, Torrentio, SKTorrent a Hellspy.</p>
         </footer>
       </body>
     </html>

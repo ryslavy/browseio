@@ -51,10 +51,16 @@ export function savePlugins(plugins: PluginManifest[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(plugins));
 }
 
+/**
+ * Fetches a URL with CORS proxy fallback.
+ * For Nuvio scrapers: uses proxies with 4s timeout.
+ * Throws if all attempts fail.
+ */
 const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
-  if (urlStr.startsWith('/') || urlStr.includes('themoviedb.org') || urlStr.includes('strem.io') || urlStr.includes('localhost')) {
+  // Skip proxying for known safe origins
+  if (urlStr.startsWith('/') || urlStr.includes('themoviedb.org') || urlStr.includes('localhost')) {
     return fetch(input, init);
   }
 
@@ -75,7 +81,7 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     try {
       const proxiedUrl = proxyFn(urlStr);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
 
       const res = await fetch(proxiedUrl, {
         ...init,
@@ -85,11 +91,58 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
 
       if (res.ok) return res;
     } catch (e) {
-      // Fast fail over CORS/Timeout
+      // Fast fail, try next proxy
     }
   }
 
   throw new Error(`CORS_FETCH_FAILED: ${urlStr}`);
+};
+
+/**
+ * Smart fetch for Stremio addons: tries direct fetch first (Stremio addons
+ * typically set Access-Control-Allow-Origin: *), then falls back to CORS proxies.
+ * Has a longer timeout (8s) since Stremio responses can be large.
+ */
+const stremioFetch = async (url: string): Promise<Response> => {
+  // 1. Try direct fetch first (most Stremio addons support CORS natively)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) return res;
+  } catch (e) {
+    console.warn(`[Stremio] Direct fetch failed for ${url.slice(0, 60)}..., trying CORS proxies`);
+  }
+
+  // 2. Fallback to CORS proxies with longer timeout
+  const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
+  const corsProxies: ((u: string) => string)[] = [];
+
+  if (customProxy && customProxy.trim()) {
+    const cp = customProxy.trim();
+    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
+  }
+
+  corsProxies.push(
+    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+  );
+
+  for (const proxyFn of corsProxies) {
+    try {
+      const proxiedUrl = proxyFn(url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(proxiedUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) return res;
+    } catch (e) {
+      // Try next proxy
+    }
+  }
+
+  throw new Error(`STREMIO_FETCH_FAILED: ${url}`);
 };
 
 export async function installPluginFromUrl(urlInput: string): Promise<PluginManifest> {
@@ -103,16 +156,11 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
     cleanUrl = cleanUrl.endsWith('/') ? `${cleanUrl}manifest.json` : `${cleanUrl}/manifest.json`;
   }
 
-  let res: Response | null = null;
+  let res: Response;
   try {
-    res = await fetch(cleanUrl);
-    if (!res.ok) throw new Error();
+    res = await stremioFetch(cleanUrl);
   } catch {
-    res = await corsFetch(cleanUrl);
-  }
-
-  if (!res || !res.ok) {
-    throw new Error(`Doplněk na zadané URL neodpovídá (HTTP ${res ? res.status : 'Error'})`);
+    throw new Error(`Doplněk na zadané URL neodpovídá.`);
   }
 
   const text = await res.text();
@@ -176,7 +224,7 @@ export async function fetchStreamsFromPlugin(
 
   const baseUrl = plugin.manifestUrl.replace('/manifest.json', '').replace(/\/$/, '');
 
-  // Handle Nuvio Executable JS Plugins
+  // ─── Handle Nuvio Executable JS Plugins ───
   if (plugin.type === 'nuvio' || plugin.manifestUrl.includes('scrapelord')) {
     try {
       const mRes = await corsFetch(plugin.manifestUrl);
@@ -271,25 +319,24 @@ export async function fetchStreamsFromPlugin(
     }
   }
 
-  // Handle Stremio Addons (Try direct fetch first, fallback to CORS proxy)
+  // ─── Handle Stremio Addons (direct fetch → CORS proxy fallback) ───
   try {
     const streamId = type === 'series' && season && episode ? `${id}:${season}:${episode}` : id;
     const requestUrl = `${baseUrl}/stream/${type}/${streamId}.json`;
 
-    let res: Response | null = null;
-    try {
-      res = await fetch(requestUrl);
-      if (!res.ok) throw new Error('Direct fetch failed');
-    } catch {
-      res = await corsFetch(requestUrl);
+    console.log(`[Stremio] Fetching streams: ${requestUrl}`);
+
+    const res = await stremioFetch(requestUrl);
+    const data = await res.json();
+
+    if (!data.streams || !Array.isArray(data.streams)) {
+      console.warn(`[Stremio] No streams array in response from ${plugin.name}`);
+      return [];
     }
 
-    if (!res || !res.ok) return [];
+    console.log(`[Stremio] ${plugin.name} returned ${data.streams.length} streams`);
 
-    const data = await res.json();
-    if (!data.streams || !Array.isArray(data.streams)) return [];
-
-    const streams = data.streams.map((s: any) => {
+    const streams: StreamSource[] = data.streams.map((s: any) => {
       const rawTitle = s.title || s.name || plugin.name;
       const titleParts = String(rawTitle).split('\n');
       const namePart = titleParts[0];
@@ -327,7 +374,7 @@ export async function fetchStreamsFromPlugin(
 
     return streams;
   } catch (e) {
-    console.error(`Error fetching streams from plugin ${plugin.name}:`, e);
+    console.error(`[Stremio] Error fetching streams from ${plugin.name}:`, e);
     return [];
   }
 }

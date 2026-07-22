@@ -93,7 +93,8 @@ function CatalogContent() {
         }
       });
       const query = params.toString();
-      router.push(query ? `${pathname}?${query}` : pathname);
+      const newUrl = query ? `${pathname}?${query}` : pathname;
+      router.replace(newUrl);
     },
     [searchParams, router, pathname]
   );

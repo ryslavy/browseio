@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getInstalledPlugins, savePlugins, installPluginFromUrl, PluginManifest } from '@/lib/plugin-engine';
+import { t, getCurrentLanguage, setCurrentLanguage, getAvailableLanguages, getCustomTranslations, saveCustomTranslations } from '@/lib/i18n';
 
 export default function SettingsPage() {
   const [torboxKey, setTorboxKey] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('torbox_api_key') || '' : ''));
@@ -14,6 +15,14 @@ export default function SettingsPage() {
   const [installing, setInstalling] = useState(false);
   const [pluginError, setPluginError] = useState<string | null>(null);
 
+  // Language State
+  const [language, setLanguage] = useState(() => getCurrentLanguage());
+  const [customTranslationsJson, setCustomTranslationsJson] = useState(() => {
+    const ct = getCustomTranslations();
+    return Object.keys(ct).length > 0 ? JSON.stringify(ct, null, 2) : '';
+  });
+  const [translationError, setTranslationError] = useState<string | null>(null);
+
   useEffect(() => {
     setPlugins(getInstalledPlugins());
   }, []);
@@ -22,6 +31,24 @@ export default function SettingsPage() {
     e.preventDefault();
     localStorage.setItem('torbox_api_key', torboxKey);
     localStorage.setItem('custom_cors_proxy', corsProxy);
+
+    // Save language
+    setCurrentLanguage(language);
+
+    // Save custom translations
+    if (customTranslationsJson.trim()) {
+      try {
+        const parsed = JSON.parse(customTranslationsJson.trim());
+        saveCustomTranslations(parsed);
+        setTranslationError(null);
+      } catch {
+        setTranslationError('Neplatný JSON formát překladů.');
+      }
+    } else {
+      saveCustomTranslations({});
+      setTranslationError(null);
+    }
+
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -38,7 +65,7 @@ export default function SettingsPage() {
       setPlugins(getInstalledPlugins());
       setNewPluginUrl('');
     } catch (err: any) {
-      setPluginError(err.message || 'Nepodařilo se nainstalovat doplněk.');
+      setPluginError(err.message || t('settings.install_error'));
     } finally {
       setInstalling(false);
     }
@@ -56,23 +83,25 @@ export default function SettingsPage() {
     savePlugins(updated);
   };
 
+  const availableLanguages = getAvailableLanguages();
+
   return (
     <div style={{ maxWidth: '750px', margin: '0 auto', padding: '2rem 1rem' }}>
-      <h1 style={{ marginBottom: '2rem', fontSize: '2rem' }}>Nastavení BrowseIO</h1>
+      <h1 style={{ marginBottom: '2rem', fontSize: '2rem' }}>{t('settings.title')}</h1>
       
       {saved && (
         <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#10b981', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid #10b981' }}>
-          Nastavení bylo úspěšně uloženo!
+          {t('settings.saved')}
         </div>
       )}
 
       {/* 1. Addons & Plugins Section */}
       <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
         <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--accent-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          🧩 Doplňky a Scrapery (Stremio & Nuvio Compatible)
+          🧩 {t('settings.plugins_title')}
         </h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: 1.6 }}>
-          Vložte URL adresu jakéhokoliv <strong>Stremio Addonu</strong> (např. <code>stremio://...</code> nebo <code>https://.../manifest.json</code>) nebo <strong>Nuvio Pluginu</strong>. Aplikace si ho automaticky přidá a načte streamy.
+          {t('settings.plugins_desc')}
         </p>
 
         <form onSubmit={handleInstallPlugin} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
@@ -80,12 +109,12 @@ export default function SettingsPage() {
             type="text" 
             value={newPluginUrl} 
             onChange={(e) => setNewPluginUrl(e.target.value)} 
-            placeholder="stremio://... nebo https://.../manifest.json"
+            placeholder={t('settings.plugin_url_placeholder')}
             className="input"
             style={{ flex: 1 }}
           />
           <button type="submit" disabled={installing} className="btn btn-primary" style={{ minWidth: '130px' }}>
-            {installing ? 'Instaluji...' : '➕ Přidat doplněk'}
+            {installing ? t('settings.installing') : `➕ ${t('settings.add_plugin')}`}
           </button>
         </form>
 
@@ -96,10 +125,10 @@ export default function SettingsPage() {
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <h4 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Nainstalované doplňky ({plugins.length})</h4>
+          <h4 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{t('settings.installed_plugins')} ({plugins.length})</h4>
           {plugins.length === 0 ? (
             <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '0.5rem 0' }}>
-              Zatím nemáte nainstalované žádné doplňky. Přidejte doplněk výše!
+              {t('settings.no_plugins')}
             </div>
           ) : (
             plugins.map(p => (
@@ -131,7 +160,7 @@ export default function SettingsPage() {
                       color: p.enabled ? '#10b981' : 'var(--text-secondary)'
                     }}
                   >
-                    {p.enabled ? 'Aktivní' : 'Vypnuto'}
+                    {p.enabled ? t('settings.active') : t('settings.disabled')}
                   </button>
                   
                   <button 
@@ -139,7 +168,7 @@ export default function SettingsPage() {
                     className="btn"
                     style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
                   >
-                    Smazat
+                    {t('settings.delete')}
                   </button>
                 </div>
               </div>
@@ -148,49 +177,96 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 2. Proxy & TorBox Integration */}
+      {/* 2. Language & Translations */}
+      <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--accent-color)' }}>
+          🌍 {t('settings.language_title')}
+        </h3>
+
+        <div style={{ marginBottom: '1.25rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+            {t('settings.language_label')}
+          </label>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {availableLanguages.map(lang => (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => setLanguage(lang.code)}
+                className={`btn ${language === lang.code ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.9rem', padding: '0.4rem 1rem' }}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+            {t('settings.custom_translations_label')}
+          </label>
+          <textarea
+            value={customTranslationsJson}
+            onChange={(e) => setCustomTranslationsJson(e.target.value)}
+            placeholder='{ "nav.home": "Hlavní stránka", "catalog.movies": "Filmy" }'
+            className="input"
+            style={{ width: '100%', minHeight: '100px', fontFamily: 'monospace', fontSize: '0.85rem', resize: 'vertical' }}
+          />
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
+            {t('settings.custom_translations_hint')}
+          </p>
+          {translationError && (
+            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '0.5rem 0.75rem', borderRadius: '6px', marginTop: '0.5rem', fontSize: '0.85rem' }}>
+              {translationError}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Proxy & TorBox Integration */}
       <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px' }}>
         <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--accent-color)' }}>
-          ⚡ Vlastní CORS Proxy a TorBox Klíč
+          ⚡ {t('settings.cors_proxy_title')}
         </h3>
         
         <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
-              Vlastní CORS Proxy URL (volitelné)
+              {t('settings.cors_proxy_label')}
             </label>
             <input 
               type="text" 
               value={corsProxy} 
               onChange={(e) => setCorsProxy(e.target.value)} 
-              placeholder="např. https://moje-proxy.workers.dev/?"
+              placeholder={t('settings.cors_proxy_placeholder')}
               className="input"
               style={{ width: '100%' }}
             />
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
-              Umožňuje obcházet blokování klientských scraperů v prohlížeči. Zadejte URL vašeho Cloudflare Workeru nebo lokálního proxy serveru.
+              {t('settings.cors_proxy_hint')}
             </p>
           </div>
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
-              TorBox API Klíč (Debrid)
+              {t('settings.torbox_label')}
             </label>
             <input 
               type="password" 
               value={torboxKey} 
               onChange={(e) => setTorboxKey(e.target.value)} 
-              placeholder="Vložte váš TorBox API Key..."
+              placeholder={t('settings.torbox_placeholder')}
               className="input"
               style={{ width: '100%' }}
             />
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
-              Pokud zadejte API klíč pro TorBox, aplikace bude automaticky ověřovat a oznamovat, které torrent streamy jsou již kešky (instant play).
+              {t('settings.torbox_hint')}
             </p>
           </div>
 
           <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
-            💾 Uložit nastavení
+            💾 {t('settings.save')}
           </button>
         </form>
       </div>
