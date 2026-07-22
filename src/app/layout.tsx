@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import Link from 'next/link';
+import GlassMouseEffect from '@/components/GlassMouseEffect';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -18,6 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body>
+        <GlassMouseEffect />
         <header className="glass-navbar" style={{ margin: '1rem', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: '1rem', zIndex: 100 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
             <Link href="/" style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fff', letterSpacing: '-0.05em' }}>
