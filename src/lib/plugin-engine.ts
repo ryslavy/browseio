@@ -209,8 +209,10 @@ export async function fetchStreamsFromPlugin(
                   const magnet = s.url && s.url.startsWith('magnet:') ? s.url : (s.magnet || undefined);
                   const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
 
+                  const cleanScraperName = scraper.name ? scraper.name.replace(/^[^\w\s\u00C0-\u024F]+/, '').trim() : plugin.name;
+
                   results.push({
-                    name: s.name || scraper.name || plugin.name,
+                    name: cleanScraperName || plugin.name,
                     title: namePart,
                     url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
                     magnet: magnet,
