@@ -1,5 +1,5 @@
 // Universal Plugin & Addon Engine for BrowseIO
-// Supports Stremio Addons & Nuvio Executable JS Plugins via dynamic CORS-enabled module runner
+// Supports Stremio Addons & Nuvio Executable JS Plugins with progressive loading & strict CORS fast-fail
 
 export interface PluginManifest {
   id: string;
@@ -138,14 +138,22 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
   for (const proxyFn of corsProxies) {
     try {
       const proxiedUrl = proxyFn(urlStr);
-      const res = await fetch(proxiedUrl, init);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const res = await fetch(proxiedUrl, {
+        ...init,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
       if (res.ok) return res;
     } catch (e) {
-      console.warn('CORS proxy failed, trying fallback:', e);
+      // Fast fail over CORS/Timeout
     }
   }
 
-  return fetch(input, init);
+  throw new Error(`CORS_FETCH_FAILED: ${urlStr}`);
 };
 
 export async function fetchStreamsFromPlugin(
@@ -154,7 +162,8 @@ export async function fetchStreamsFromPlugin(
   id: string,
   season?: number,
   episode?: number,
-  title?: string
+  title?: string,
+  onPartialStreams?: (streams: StreamSource[]) => void
 ): Promise<StreamSource[]> {
   if (!plugin.enabled) return [];
 
@@ -198,7 +207,8 @@ export async function fetchStreamsFromPlugin(
                 title: title
               });
 
-              if (Array.isArray(raw)) {
+              if (Array.isArray(raw) && raw.length > 0) {
+                const scraperStreams: StreamSource[] = [];
                 raw.forEach((s: any) => {
                   const rawTitle = s.title || s.name || scraper.name || plugin.name;
                   const titleParts = String(rawTitle).split('\n');
@@ -219,7 +229,7 @@ export async function fetchStreamsFromPlugin(
 
                   const cleanScraperName = scraper.name ? scraper.name.replace(/^[^\w\s\u00C0-\u024F]+/, '').trim() : plugin.name;
 
-                  results.push({
+                  const streamObj: StreamSource = {
                     name: cleanScraperName || plugin.name,
                     title: namePart,
                     url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
@@ -230,12 +240,19 @@ export async function fetchStreamsFromPlugin(
                     headers: s.behaviorHints?.proxyHeaders?.request,
                     subtitles: s.subtitles,
                     behaviorHints: s.behaviorHints
-                  });
+                  };
+
+                  scraperStreams.push(streamObj);
+                  results.push(streamObj);
                 });
+
+                if (onPartialStreams) {
+                  onPartialStreams(scraperStreams);
+                }
               }
             }
           } catch (err) {
-            console.error(`Error running scraper ${scraper.name}:`, err);
+            console.error(`Scraper ${scraper.name} failed or timed out:`, err);
           }
         })
       );
@@ -258,7 +275,7 @@ export async function fetchStreamsFromPlugin(
     const data = await res.json();
     if (!data.streams || !Array.isArray(data.streams)) return [];
 
-    return data.streams.map((s: any) => {
+    const streams = data.streams.map((s: any) => {
       const rawTitle = s.title || s.name || plugin.name;
       const titleParts = String(rawTitle).split('\n');
       const namePart = titleParts[0];
@@ -289,6 +306,12 @@ export async function fetchStreamsFromPlugin(
         behaviorHints: s.behaviorHints
       };
     });
+
+    if (onPartialStreams && streams.length > 0) {
+      onPartialStreams(streams);
+    }
+
+    return streams;
   } catch (e) {
     console.error(`Error fetching streams from plugin ${plugin.name}:`, e);
     return [];

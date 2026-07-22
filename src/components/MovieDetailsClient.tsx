@@ -127,17 +127,19 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       activePlugins.map(async plugin => {
         try {
           const title = meta?.name || meta?.czTitle || meta?.originalTitle;
-          const rawStreams = await fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode, title);
-          if (activeFetchIdRef.current !== fetchId || !rawStreams || rawStreams.length === 0) return;
+          const handlePartial = async (partialRaw: MediaSource[]) => {
+            if (activeFetchIdRef.current !== fetchId || !partialRaw || partialRaw.length === 0) return;
+            const processedStreams = await checkTorBoxCacheForSources(partialRaw);
+            if (activeFetchIdRef.current === fetchId) {
+              setSources(prev => {
+                const existing = new Set(prev.map(s => s.url || s.magnet || s.title));
+                const fresh = processedStreams.filter(s => !existing.has(s.url || s.magnet || s.title));
+                return [...prev, ...fresh];
+              });
+            }
+          };
 
-          const processedStreams = await checkTorBoxCacheForSources(rawStreams);
-          if (activeFetchIdRef.current === fetchId) {
-            setSources(prev => {
-              const existing = new Set(prev.map(s => s.url || s.magnet || s.title));
-              const fresh = processedStreams.filter(s => !existing.has(s.url || s.magnet || s.title));
-              return [...prev, ...fresh];
-            });
-          }
+          await fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode, title, handlePartial);
         } catch (e) {
           console.error(`Error loading streams from ${plugin.name}:`, e);
         }
