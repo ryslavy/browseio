@@ -1000,7 +1000,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
             </button>
           </div>
           <div style={{ flex: 1, position: 'relative', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
-            <VideoPlayer options={{ autoplay: true, controls: true, responsive: true, fill: true, sources: [{ src: playingUrl, type: playingUrl.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4' }] }} />
+            <VideoPlayer options={{ autoplay: true, controls: true, responsive: true, fill: true, sources: [{ src: playingUrl }] }} />
           </div>
         </div>
       )}

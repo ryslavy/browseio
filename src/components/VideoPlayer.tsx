@@ -1,62 +1,110 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 
 export interface VideoPlayerProps {
-  options: any;
+  options: {
+    autoplay?: boolean;
+    controls?: boolean;
+    responsive?: boolean;
+    fluid?: boolean;
+    fill?: boolean;
+    playbackRates?: number[];
+    sources: { src: string; type?: string }[];
+    [key: string]: any;
+  };
   onReady?: (player: any) => void;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) => {
-  const videoRef = useRef<HTMLDivElement | null>(null);
+  const videoNodeRef = useRef<HTMLVideoElement | null>(null);
   const playerRef = useRef<any>(null);
+  const [hasError, setHasError] = useState(false);
+
+  const srcUrl = options.sources && options.sources[0]?.src ? options.sources[0].src : '';
 
   useEffect(() => {
-    if (!playerRef.current && videoRef.current) {
-      const videoElement = document.createElement("video");
-      videoElement.setAttribute('controls', 'true');
-      videoElement.classList.add('video-js');
-      videoElement.classList.add('vjs-big-play-centered');
-      videoElement.classList.add('vjs-premium-theme');
-      videoRef.current.appendChild(videoElement);
+    if (!srcUrl || !videoNodeRef.current) return;
 
-      const player = playerRef.current = videojs(videoElement, options, () => {
-        videojs.log('player is ready');
-        if (onReady) onReady(player);
-      });
-    } else if (playerRef.current) {
+    setHasError(false);
+
+    const isHls = srcUrl.includes('.m3u8');
+    const sourceType = options.sources[0]?.type || (isHls ? 'application/x-mpegURL' : undefined);
+
+    const sources = sourceType ? [{ src: srcUrl, type: sourceType }] : [{ src: srcUrl }];
+
+    if (!playerRef.current) {
+      const element = videoNodeRef.current;
+      try {
+        const player = playerRef.current = videojs(element, {
+          controls: true,
+          autoplay: true,
+          preload: 'auto',
+          responsive: true,
+          fluid: true,
+          ...options,
+          sources: sources,
+        }, () => {
+          if (onReady) onReady(player);
+        });
+
+        player.on('error', () => {
+          console.warn('Video.js error, falling back to native HTML5 video player');
+          setHasError(true);
+        });
+      } catch (err) {
+        console.error('Failed to initialize Video.js:', err);
+        setHasError(true);
+      }
+    } else {
       const player = playerRef.current;
-      player.autoplay(options.autoplay);
-      player.src(options.sources);
+      player.src(sources);
+      if (options.autoplay) {
+        player.play().catch(() => {});
+      }
     }
-  }, [options, videoRef]);
+  }, [srcUrl]);
 
   useEffect(() => {
-    const player = playerRef.current;
     return () => {
-      if (player && !player.isDisposed()) {
-        player.dispose();
+      if (playerRef.current && !playerRef.current.isDisposed()) {
+        try {
+          playerRef.current.dispose();
+        } catch (e) {
+          // Ignore disposal errors on unmount
+        }
         playerRef.current = null;
       }
     };
   }, []);
 
   return (
-    <div data-vjs-player style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <div ref={videoRef} style={{ width: '100%', height: '100%' }} />
+    <div data-vjs-player style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {hasError ? (
+        <video
+          src={srcUrl}
+          controls
+          autoPlay
+          style={{ width: '100%', height: '100%', maxHeight: '100%', objectFit: 'contain', backgroundColor: '#000' }}
+        />
+      ) : (
+        <div style={{ width: '100%', height: '100%' }}>
+          <video ref={videoNodeRef} className="video-js vjs-big-play-centered vjs-premium-theme" playsInline />
+        </div>
+      )}
       
       <style dangerouslySetInnerHTML={{__html: `
         .vjs-premium-theme {
           width: 100% !important;
           height: 100% !important;
           font-family: 'Inter', sans-serif;
-          font-size: 16px !important; /* Zvětšení celého UI přehrávače */
+          font-size: 16px !important;
         }
         
         .vjs-premium-theme .vjs-big-play-button {
-          background-color: rgba(229, 9, 20, 0.9);
+          background-color: rgba(59, 130, 246, 0.9);
           border: none;
           border-radius: 50%;
           width: 80px;
@@ -68,7 +116,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         }
         
         .vjs-premium-theme:hover .vjs-big-play-button {
-          background-color: rgb(229, 9, 20);
+          background-color: rgb(59, 130, 246);
           transform: scale(1.1);
         }
         
@@ -79,11 +127,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) =>
         }
         
         .vjs-premium-theme .vjs-play-progress {
-          background-color: rgb(229, 9, 20);
+          background-color: rgb(59, 130, 246);
         }
         
         .vjs-premium-theme .vjs-volume-level {
-          background-color: rgb(229, 9, 20);
+          background-color: rgb(59, 130, 246);
         }
         
         .vjs-premium-theme .vjs-slider {
