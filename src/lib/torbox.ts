@@ -34,6 +34,7 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
 
   // cors.eu.org supports POST & GET with Authorization headers for TorBox API
   corsProxies.push(
+    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://cors.eu.org/${u}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
   );

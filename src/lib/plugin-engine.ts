@@ -31,6 +31,67 @@ export interface StreamSource {
   behaviorHints?: any;
 }
 
+function base32ToHex(base32: string): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  let hex = '';
+  const upper = base32.toUpperCase();
+  for (let i = 0; i < upper.length; i++) {
+    const val = alphabet.indexOf(upper[i]);
+    if (val === -1) return '';
+    bits += val.toString(2).padStart(5, '0');
+  }
+  for (let i = 0; i + 4 <= bits.length; i += 4) {
+    const chunk = bits.substring(i, i + 4);
+    hex += parseInt(chunk, 2).toString(16);
+  }
+  return hex.toLowerCase();
+}
+
+export function normalizeInfoHash(hashOrMagnet?: string): string {
+  if (!hashOrMagnet) return '';
+  const clean = hashOrMagnet.trim();
+  
+  const hexMatch = clean.match(/\b([a-fA-F0-9]{40})\b/);
+  if (hexMatch) return hexMatch[1].toLowerCase();
+
+  const btihMatch = clean.match(/urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
+  if (btihMatch) {
+    const raw = btihMatch[1];
+    if (raw.length === 40) return raw.toLowerCase();
+    if (raw.length === 32) return base32ToHex(raw);
+  }
+
+  if (/^[a-zA-Z2-7]{32}$/.test(clean)) {
+    return base32ToHex(clean);
+  }
+
+  return '';
+}
+
+export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
+  if (s.isTorBoxCached) return true;
+
+  // 1. Direct HTTP/HTTPS video stream link (not magnet and not .torrent file)
+  if (s.url && /^https?:\/\//i.test(s.url) && !s.url.toLowerCase().endsWith('.torrent')) {
+    return true;
+  }
+
+  // 2. Title, name, subProvider or behaviorHints contains Debrid cached indicator
+  const combined = `${s.name || ''} ${s.title || ''} ${s.subProvider || ''} ${s.pluginName || ''}`;
+  if (
+    /\[?(RD\+|TB\+|AD\+|DL\+|PM\+|RD|TB|AD|DL|PM)\]?/i.test(combined) ||
+    combined.includes('⚡') ||
+    combined.toLowerCase().includes('debrid') ||
+    combined.toLowerCase().includes('cached') ||
+    s.behaviorHints?.cached === true
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 const STORAGE_KEY = 'browseio_installed_plugins';
 
 // NO built-in default plugins to comply with regulations.
@@ -315,7 +376,7 @@ export async function fetchStreamsFromPlugin(
                   if (sizeMatch) size = sizeMatch[1];
 
                   const magnet = s.url && s.url.startsWith('magnet:') ? s.url : (s.magnet || undefined);
-                  const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
+                  const infoHash = normalizeInfoHash(s.infoHash || s.behaviorHints?.infoHash || magnet || (s.url && s.url.startsWith('magnet:') ? s.url : undefined));
 
                   const cleanScraperName = scraper.name ? scraper.name.replace(/^[^\w\s\u00C0-\u024F]+/, '').trim() : plugin.name;
                   const rawSubName = s.name || cleanScraperName || plugin.name;
@@ -328,13 +389,15 @@ export async function fetchStreamsFromPlugin(
                     title: namePart,
                     url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
                     magnet: magnet,
-                    infoHash: infoHash,
+                    infoHash: infoHash || undefined,
                     size: size,
                     seeders: seeders,
                     headers: s.behaviorHints?.proxyHeaders?.request,
                     subtitles: s.subtitles,
                     behaviorHints: s.behaviorHints
                   };
+
+                  streamObj.isTorBoxCached = isDebridCachedStream(streamObj);
 
                   scraperStreams.push(streamObj);
                   results.push(streamObj);
@@ -391,11 +454,11 @@ export async function fetchStreamsFromPlugin(
       if (sizeMatch) size = sizeMatch[1];
 
       const magnet = s.url && s.url.startsWith('magnet:') ? s.url : (s.magnet || undefined);
-      const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
+      const infoHash = normalizeInfoHash(s.infoHash || s.behaviorHints?.infoHash || magnet || (s.url && s.url.startsWith('magnet:') ? s.url : undefined));
 
       const subName = s.name ? String(s.name).split('\n')[0] : plugin.name;
 
-      return {
+      const streamObj: StreamSource = {
         name: subName,
         pluginId: plugin.id,
         pluginName: plugin.name,
@@ -403,13 +466,17 @@ export async function fetchStreamsFromPlugin(
         title: namePart,
         url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
         magnet: magnet,
-        infoHash: infoHash,
+        infoHash: infoHash || undefined,
         size: size,
         seeders: seeders,
         headers: s.behaviorHints?.proxyHeaders?.request,
         subtitles: s.subtitles,
         behaviorHints: s.behaviorHints
       };
+
+      streamObj.isTorBoxCached = isDebridCachedStream(streamObj);
+
+      return streamObj;
     });
 
     if (onPartialStreams && streams.length > 0) {

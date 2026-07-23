@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
-import { getInstalledPlugins, fetchStreamsFromPlugin, StreamSource } from '@/lib/plugin-engine';
+import { getInstalledPlugins, fetchStreamsFromPlugin, StreamSource, normalizeInfoHash, isDebridCachedStream } from '@/lib/plugin-engine';
 import { checkTorBoxCached, resolveTorBoxStreamUrl, cacheTorBoxTorrent } from '@/lib/torbox';
 import { t, getCurrentLanguage, i18nEventTarget } from '@/lib/i18n';
 
@@ -125,28 +125,25 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     }
 
     const getHashFromSource = (s: StreamSource): string => {
-      if (s.infoHash) return s.infoHash.toLowerCase();
-      const magnetStr = s.magnet || (s.url && s.url.startsWith('magnet:') ? s.url : '');
-      if (magnetStr) {
-        const match = magnetStr.match(/urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
-        if (match) return match[1].toLowerCase();
-      }
-      return '';
+      return normalizeInfoHash(s.infoHash || s.magnet || s.url || s.behaviorHints?.infoHash || '');
     };
 
     const checkTorBoxCacheForSources = async (newSources: StreamSource[]) => {
       const hashesToCheck: string[] = [];
-      newSources.forEach(s => {
+      
+      const updatedSources = newSources.map(s => {
+        const isCached = isDebridCachedStream(s);
         const hash = getHashFromSource(s);
         if (hash) hashesToCheck.push(hash);
+        return { ...s, isTorBoxCached: isCached };
       });
 
-      if (hashesToCheck.length === 0) return newSources;
+      if (hashesToCheck.length === 0) return updatedSources;
 
       try {
         const cachedSet = await checkTorBoxCached(hashesToCheck, torboxApiKey || undefined);
         if (cachedSet.size > 0) {
-          return newSources.map(s => {
+          return updatedSources.map(s => {
             const hash = getHashFromSource(s);
             if (hash && cachedSet.has(hash.toLowerCase())) {
               return { ...s, isTorBoxCached: true };
@@ -157,7 +154,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       } catch (e) {
         console.error('TorBox cache check failed:', e);
       }
-      return newSources;
+      return updatedSources;
     };
 
     Promise.allSettled(
@@ -234,6 +231,17 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     const sourceName = source.name || 'P2P Stream';
 
     const displayTitle = meta?.name ? `${meta.name}${meta.releaseInfo ? ` (${meta.releaseInfo})` : ''}` : sourceName;
+
+    // If stream is already a direct HTTP(S) Debrid link (e.g. Torrentio RD / KnightCrawler RD / Nuvio)
+    if (url && /^https?:\/\//i.test(url) && !url.toLowerCase().endsWith('.torrent')) {
+      if (mode === 'local') {
+        launchLocalPlayer(url);
+      } else {
+        setPlayingUrl(url);
+        setPlayingTitle(displayTitle);
+      }
+      return;
+    }
 
     if (mode === 'debrid' && isTorBoxCached && torboxApiKey) {
       try {
