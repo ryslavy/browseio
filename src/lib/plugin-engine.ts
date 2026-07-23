@@ -72,18 +72,10 @@ export function normalizeInfoHash(hashOrMagnet?: string): string {
 export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
   if (s.isTorBoxCached) return true;
 
-  // 1. Direct HTTP/HTTPS video stream link (not magnet and not .torrent file)
-  if (s.url && /^https?:\/\//i.test(s.url) && !s.url.toLowerCase().endsWith('.torrent')) {
-    return true;
-  }
-
-  // 2. Title, name, subProvider or behaviorHints contains Debrid cached indicator
+  // Title, name, subProvider or behaviorHints explicitly contains Debrid cached tags (e.g. [TB+], [RD+], [TorBox])
   const combined = `${s.name || ''} ${s.title || ''} ${s.subProvider || ''} ${s.pluginName || ''}`;
   if (
-    /\[?(RD\+|TB\+|AD\+|DL\+|PM\+|RD|TB|AD|DL|PM)\]?/i.test(combined) ||
-    combined.includes('⚡') ||
-    combined.toLowerCase().includes('debrid') ||
-    combined.toLowerCase().includes('cached') ||
+    /\[?(RD\+|TB\+|AD\+|DL\+|PM\+)\]?/i.test(combined) ||
     s.behaviorHints?.cached === true
   ) {
     return true;
