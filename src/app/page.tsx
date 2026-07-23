@@ -320,40 +320,66 @@ function CatalogContent() {
  * instantly switches view without requiring full page reloads or popstate events.
  */
 function useCurrentView() {
+  const [view, setView] = useState<{ type: 'catalog' | 'settings' | 'movie'; mediaType?: string; id?: string }>({ type: 'catalog' });
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  return useMemo(() => {
-    if (typeof window === 'undefined') return { type: 'catalog' as const };
+  useEffect(() => {
+    function updateView() {
+      if (typeof window === 'undefined') return;
 
-    let path = pathname || window.location.pathname;
-    const search = searchParams ? searchParams.toString() : window.location.search;
-    const hash = typeof window !== 'undefined' ? window.location.hash : '';
-    const sp = new URLSearchParams(search);
+      let path = pathname || window.location.pathname;
+      const search = searchParams ? searchParams.toString() : window.location.search;
+      const hash = typeof window !== 'undefined' ? window.location.hash : '';
+      const sp = new URLSearchParams(search);
 
-    const redirectPath = sp.get('p');
-    let effectivePath = path;
-    if (redirectPath) {
-      const decodedPath = redirectPath.replace(/~and~/g, '&');
-      effectivePath = '/' + decodedPath;
+      // GitHub Pages 404 Redirect Handler (?p=movie/...)
+      const redirectPath = sp.get('p');
+      let effectivePath = path;
+      if (redirectPath) {
+        const decodedPath = redirectPath.replace(/~and~/g, '&');
+        effectivePath = '/' + decodedPath;
+
+        // Clean the ?p=... parameter from browser history so clicking <Link href="/"> works cleanly
+        sp.delete('p');
+        const cleanSearch = sp.toString();
+        const basePath = window.location.pathname.replace(/\/?$/, '');
+        const cleanUrl = (basePath || '') + (cleanSearch ? `?${cleanSearch}` : '') + hash;
+        window.history.replaceState(null, '', cleanUrl || '/');
+      }
+
+      if (effectivePath.includes('/settings') || hash.includes('settings') || sp.get('page') === 'settings') {
+        setView({ type: 'settings' });
+        return;
+      }
+
+      const movieMatch = effectivePath.match(/\/movie\/([^/]+)\/([^/]+)/) || hash.match(/movie\/([^/]+)\/([^/]+)/);
+      if (movieMatch) {
+        setView({ type: 'movie', mediaType: movieMatch[1], id: movieMatch[2] });
+        return;
+      }
+
+      const idParam = sp.get('id');
+      if (idParam) {
+        setView({ type: 'movie', mediaType: sp.get('type') || 'movie', id: idParam });
+        return;
+      }
+
+      setView({ type: 'catalog' });
     }
 
-    if (effectivePath.includes('/settings') || hash.includes('settings') || sp.get('page') === 'settings') {
-      return { type: 'settings' as const };
-    }
+    updateView();
 
-    const movieMatch = effectivePath.match(/\/movie\/([^/]+)\/([^/]+)/) || hash.match(/movie\/([^/]+)\/([^/]+)/);
-    if (movieMatch) {
-      return { type: 'movie' as const, mediaType: movieMatch[1], id: movieMatch[2] };
-    }
+    window.addEventListener('popstate', updateView);
+    window.addEventListener('hashchange', updateView);
 
-    const idParam = sp.get('id');
-    if (idParam) {
-      return { type: 'movie' as const, mediaType: sp.get('type') || 'movie', id: idParam };
-    }
-
-    return { type: 'catalog' as const };
+    return () => {
+      window.removeEventListener('popstate', updateView);
+      window.removeEventListener('hashchange', updateView);
+    };
   }, [pathname, searchParams]);
+
+  return view;
 }
 
 function HomeContent() {
