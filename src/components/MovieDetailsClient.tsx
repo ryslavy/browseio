@@ -852,16 +852,36 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Audio & Player QoL Notice */}
+            <div 
+              style={{ 
+                padding: '0.75rem 1.25rem', 
+                borderRadius: '12px', 
+                backgroundColor: 'rgba(59, 130, 246, 0.08)', 
+                border: '1px solid rgba(59, 130, 246, 0.2)', 
+                color: '#93c5fd', 
+                fontSize: '0.825rem', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.6rem' 
+              }}
+            >
+              <span>{t('streams.audio_notice')}</span>
+            </div>
+
             {processedSources.map((source, idx) => {
               const quality = detectQuality(source);
               const audio = detectAudio(source);
               const subProviderName = source.subProvider || source.name;
-              const hasMagnetOrHash = Boolean(source.magnet || source.infoHash);
+              
+              const isMagnetOrP2P = Boolean(source.magnet || source.infoHash || (source.url && (source.url.startsWith('magnet:') || source.url.toLowerCase().endsWith('.torrent'))));
+              const isDebridStream = Boolean(source.isTorBoxCached || isDebridCachedStream(source));
+              const isDirectWebStream = Boolean(source.url && /^https?:\/\//i.test(source.url) && !isDebridStream && !isMagnetOrP2P);
 
               return (
                 <div 
                   key={idx} 
-                  className={`glass-panel ${source.isTorBoxCached ? 'glass-debrid' : ''}`} 
+                  className={`glass-panel ${isDebridStream ? 'glass-debrid' : ''}`} 
                   style={{ 
                     padding: '1.25rem 1.5rem', 
                     borderRadius: '16px',
@@ -911,10 +931,18 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                         </span>
                       )}
 
-                      {/* Debrid Badge */}
-                      {source.isTorBoxCached && (
+                      {/* Stream Category Badge */}
+                      {isDebridStream ? (
                         <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.25)', color: '#facc15', border: '1px solid rgba(250, 204, 21, 0.5)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800 }}>
-                          ⚡ TorBox Instant
+                          ⚡ {t('streams.badge_debrid_http')}
+                        </span>
+                      ) : isDirectWebStream ? (
+                        <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(96, 165, 250, 0.4)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                          {t('streams.badge_direct_web')}
+                        </span>
+                      ) : (
+                        <span style={{ backgroundColor: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', border: '1px solid rgba(192, 132, 252, 0.4)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600 }}>
+                          {t('streams.badge_p2p_magnet')}
                         </span>
                       )}
 
@@ -940,7 +968,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                   {/* ACTIONS BUTTONS */}
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     {/* Primary Web Player or Debrid Instant Play */}
-                    {source.isTorBoxCached ? (
+                    {isDebridStream ? (
                       <button 
                         onClick={() => handlePlay(source, 'debrid')} 
                         className="btn btn-primary" 
@@ -948,7 +976,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                       >
                         {t('streams.play_debrid')}
                       </button>
-                    ) : source.url && !source.url.startsWith('magnet') ? (
+                    ) : isDirectWebStream ? (
                       <button 
                         onClick={() => handlePlay(source, 'direct')} 
                         className="btn btn-primary"
@@ -956,10 +984,18 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                       >
                         {t('streams.play_web')}
                       </button>
-                    ) : null}
+                    ) : (
+                      <button 
+                        onClick={() => handlePlay(source, 'direct')} 
+                        className="btn btn-primary"
+                        style={{ padding: '0.5rem 1.1rem', fontSize: '0.9rem', fontWeight: 700 }}
+                      >
+                        {t('streams.play_webtor')}
+                      </button>
+                    )}
 
-                    {/* Manual TorBox Cache Button (for un-cached torrents/magnets) */}
-                    {!source.isTorBoxCached && hasMagnetOrHash && (
+                    {/* Manual TorBox Cache Button (ONLY for P2P magnets that are not cached yet) */}
+                    {isMagnetOrP2P && !source.isTorBoxCached && (
                       <button
                         onClick={() => handleCacheTorBox(source, idx)}
                         disabled={cachingIdx === idx}
@@ -984,7 +1020,11 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                     <button 
                       onClick={() => handlePlay(source, 'local')} 
                       className="btn btn-secondary" 
-                      style={{ fontSize: '0.85rem', padding: '0.5rem 0.85rem' }}
+                      style={{ 
+                        fontSize: '0.85rem', 
+                        padding: '0.5rem 0.85rem',
+                        borderColor: isDebridStream ? 'rgba(250, 204, 21, 0.4)' : undefined
+                      }}
                       title={`Spustit v ${preferredPlayer.toUpperCase()}`}
                     >
                       {getLocalPlayerLabel()}
