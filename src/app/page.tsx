@@ -313,58 +313,47 @@ function CatalogContent() {
   );
 }
 
+/**
+ * Reactive Current View Hook:
+ * Dynamically reacts to Next.js App Router pathname & searchParams changes
+ * so navigating via <Link href="/"> or <Link href="/settings"> or <Link href="/movie/...">
+ * instantly switches view without requiring full page reloads or popstate events.
+ */
 function useCurrentView() {
-  const [view, setView] = useState<{ type: 'catalog' | 'settings' | 'movie'; mediaType?: string; id?: string }>({ type: 'catalog' });
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  useEffect(() => {
-    function updateView() {
-      if (typeof window === 'undefined') return;
-      let path = window.location.pathname;
-      const search = window.location.search;
-      const hash = window.location.hash;
-      const sp = new URLSearchParams(search);
+  return useMemo(() => {
+    if (typeof window === 'undefined') return { type: 'catalog' as const };
 
-      const redirectPath = sp.get('p');
-      if (redirectPath) {
-        const decodedPath = redirectPath.replace(/~and~/g, '&');
-        path = '/' + decodedPath;
-        const base = window.location.pathname.replace(/\/$/, '');
-        const cleanUrl = (base + '/' + decodedPath).replace(/\/\//g, '/');
-        window.history.replaceState(null, '', cleanUrl);
-      }
+    let path = pathname || window.location.pathname;
+    const search = searchParams ? searchParams.toString() : window.location.search;
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const sp = new URLSearchParams(search);
 
-      if (path.includes('/settings') || hash.includes('settings') || sp.get('page') === 'settings') {
-        setView({ type: 'settings' });
-        return;
-      }
-
-      const movieMatch = path.match(/\/movie\/([^/]+)\/([^/]+)/) || hash.match(/movie\/([^/]+)\/([^/]+)/);
-      if (movieMatch) {
-        setView({ type: 'movie', mediaType: movieMatch[1], id: movieMatch[2] });
-        return;
-      }
-
-      const idParam = sp.get('id');
-      if (idParam) {
-        setView({ type: 'movie', mediaType: sp.get('type') || 'movie', id: idParam });
-        return;
-      }
-
-      setView({ type: 'catalog' });
+    const redirectPath = sp.get('p');
+    let effectivePath = path;
+    if (redirectPath) {
+      const decodedPath = redirectPath.replace(/~and~/g, '&');
+      effectivePath = '/' + decodedPath;
     }
 
-    updateView();
-    window.addEventListener('popstate', updateView);
-    window.addEventListener('hashchange', updateView);
+    if (effectivePath.includes('/settings') || hash.includes('settings') || sp.get('page') === 'settings') {
+      return { type: 'settings' as const };
+    }
 
-    return () => {
-      window.removeEventListener('popstate', updateView);
-      window.removeEventListener('hashchange', updateView);
-    };
-  }, [searchParams]);
+    const movieMatch = effectivePath.match(/\/movie\/([^/]+)\/([^/]+)/) || hash.match(/movie\/([^/]+)\/([^/]+)/);
+    if (movieMatch) {
+      return { type: 'movie' as const, mediaType: movieMatch[1], id: movieMatch[2] };
+    }
 
-  return view;
+    const idParam = sp.get('id');
+    if (idParam) {
+      return { type: 'movie' as const, mediaType: sp.get('type') || 'movie', id: idParam };
+    }
+
+    return { type: 'catalog' as const };
+  }, [pathname, searchParams]);
 }
 
 function HomeContent() {
