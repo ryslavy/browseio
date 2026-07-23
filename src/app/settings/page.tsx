@@ -7,6 +7,7 @@ import { t, getCurrentLanguage, setCurrentLanguage, getAvailableLanguages, getCu
 export default function SettingsPage() {
   const [torboxKey, setTorboxKey] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('torbox_api_key') || '' : ''));
   const [corsProxy, setCorsProxy] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') || '' : ''));
+  const [preferredPlayer, setPreferredPlayer] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('preferred_local_player') || 'potplayer' : 'potplayer'));
   const [saved, setSaved] = useState(false);
 
   // Plugins State
@@ -31,6 +32,7 @@ export default function SettingsPage() {
     e.preventDefault();
     localStorage.setItem('torbox_api_key', torboxKey);
     localStorage.setItem('custom_cors_proxy', corsProxy);
+    localStorage.setItem('preferred_local_player', preferredPlayer);
 
     // Save language
     setCurrentLanguage(language);
@@ -177,7 +179,36 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 2. Language & Translations */}
+      {/* 2. Preferred Local Media Player Selection */}
+      <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--accent-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          🍿 {t('settings.player_title')}
+        </h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+          {t('settings.player_desc')}
+        </p>
+
+        <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+              {t('settings.player_label')}
+            </label>
+            <select
+              value={preferredPlayer}
+              onChange={(e) => setPreferredPlayer(e.target.value)}
+              className="input"
+              style={{ width: '100%', padding: '0.75rem 1rem', fontSize: '0.95rem', borderRadius: '8px', cursor: 'pointer' }}
+            >
+              <option value="potplayer" style={{ backgroundColor: '#1a1d24' }}>🍿 PotPlayer (Windows)</option>
+              <option value="vlc" style={{ backgroundColor: '#1a1d24' }}>🟧 VLC Media Player (Cross-platform)</option>
+              <option value="mpv" style={{ backgroundColor: '#1a1d24' }}>🎬 MPV Player (Cross-platform)</option>
+              <option value="infuse" style={{ backgroundColor: '#1a1d24' }}>💧 Infuse (macOS / iOS)</option>
+            </select>
+          </div>
+        </form>
+      </div>
+
+      {/* 3. Language & Translations */}
       <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
         <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--accent-color)' }}>
           🌍 {t('settings.language_title')}
@@ -196,7 +227,7 @@ export default function SettingsPage() {
                 className={`btn ${language === lang.code ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ fontSize: '0.9rem', padding: '0.4rem 1rem' }}
               >
-                {lang.label}
+                {lang.flag} {lang.label}
               </button>
             ))}
           </div>
@@ -209,7 +240,7 @@ export default function SettingsPage() {
           <textarea
             value={customTranslationsJson}
             onChange={(e) => setCustomTranslationsJson(e.target.value)}
-            placeholder='{ "nav.home": "Hlavní stránka", "catalog.movies": "Filmy" }'
+            placeholder='{ "nav.home": "Home", "catalog.movies": "Filmy" }'
             className="input"
             style={{ width: '100%', minHeight: '100px', fontFamily: 'monospace', fontSize: '0.85rem', resize: 'vertical' }}
           />
@@ -224,7 +255,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 3. Proxy & TorBox Integration */}
+      {/* 4. Proxy & TorBox Integration */}
       <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px' }}>
         <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--accent-color)' }}>
           ⚡ {t('settings.cors_proxy_title')}
@@ -265,7 +296,7 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
+          <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-start', padding: '0.6rem 1.5rem' }}>
             💾 {t('settings.save')}
           </button>
         </form>

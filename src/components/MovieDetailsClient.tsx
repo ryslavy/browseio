@@ -6,7 +6,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
 import { getInstalledPlugins, fetchStreamsFromPlugin, StreamSource } from '@/lib/plugin-engine';
-import { checkTorBoxCached, resolveTorBoxStreamUrl } from '@/lib/torbox';
+import { checkTorBoxCached, resolveTorBoxStreamUrl, cacheTorBoxTorrent } from '@/lib/torbox';
 import { t, i18nEventTarget } from '@/lib/i18n';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), { ssr: false });
@@ -60,8 +60,8 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
   const [playingTitle, setPlayingTitle] = useState<string>('');
 
   // 2-TIER PLUGIN & SUB-SOURCE FILTERS
-  const [pluginFilter, setPluginFilter] = useState<string>('all'); // 'all' or pluginName/pluginId
-  const [subSourceFilter, setSubSourceFilter] = useState<string>('all'); // 'all' or subProvider name
+  const [pluginFilter, setPluginFilter] = useState<string>('all');
+  const [subSourceFilter, setSubSourceFilter] = useState<string>('all');
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>('all');
   const [audioFilter, setAudioFilter] = useState<AudioFilter>('all');
   const [streamSort, setStreamSort] = useState<StreamSortMode>('quality_desc');
@@ -71,6 +71,17 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [selectedEpisode, setSelectedEpisode] = useState<number>(1);
   const [episodesList, setEpisodesList] = useState<Episode[]>([]);
+
+  // Local Player & Caching States
+  const [cachingIdx, setCachingIdx] = useState<number | null>(null);
+  const [cachedSuccessIdx, setCachedSuccessIdx] = useState<number | null>(null);
+  const [preferredPlayer, setPreferredPlayer] = useState('potplayer');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPreferredPlayer(localStorage.getItem('preferred_local_player') || 'potplayer');
+    }
+  }, []);
 
   useEffect(() => {
     async function loadMeta() {
@@ -175,22 +186,39 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     return () => clearTimeout(timeout);
   }, [meta, selectedSeason, selectedEpisode, type, id, fetchStreams]);
 
-  const handlePlay = async (source: StreamSource, mode: 'debrid' | 'direct' | 'potplayer' = 'direct') => {
+  const launchLocalPlayer = (streamUrl: string) => {
+    const player = localStorage.getItem('preferred_local_player') || 'potplayer';
+    try {
+      if (player === 'vlc') {
+        window.location.href = `vlc://${streamUrl}`;
+      } else if (player === 'mpv') {
+        window.location.href = `mpv://${streamUrl}`;
+      } else if (player === 'infuse') {
+        window.location.href = `infuse://x-callback-url/play?url=${encodeURIComponent(streamUrl)}`;
+      } else {
+        window.location.href = `potplayer://${streamUrl}`;
+      }
+    } catch (e) {
+      console.error('Failed to launch local player:', e);
+      alert('Chyba při spouštění přehrávače.');
+    }
+  };
+
+  const getLocalPlayerLabel = () => {
+    const p = preferredPlayer;
+    if (p === 'vlc') return '🟧 VLC';
+    if (p === 'mpv') return '🎬 MPV';
+    if (p === 'infuse') return '💧 Infuse';
+    return '🍿 PotPlayer';
+  };
+
+  const handlePlay = async (source: StreamSource, mode: 'debrid' | 'direct' | 'local' = 'direct') => {
     const torboxApiKey = localStorage.getItem('torbox_api_key');
     const { infoHash, magnet, url, isTorBoxCached } = source;
     const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
     const sourceName = source.name || 'P2P Stream';
 
     const displayTitle = meta?.name ? `${meta.name}${meta.releaseInfo ? ` (${meta.releaseInfo})` : ''}` : sourceName;
-
-    const playInPotPlayer = async (streamUrl: string) => {
-      try {
-        window.location.href = `potplayer://${streamUrl}`;
-      } catch (e) {
-        console.error('Error launching PotPlayer:', e);
-        alert('Chyba při spouštění PotPlayeru.');
-      }
-    };
 
     if (mode === 'debrid' && isTorBoxCached && torboxApiKey) {
       try {
@@ -208,14 +236,62 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       return;
     }
 
-    if (url && !url.startsWith('magnet')) {
-      if (mode === 'potplayer') {
-        await playInPotPlayer(url);
+    if (mode === 'local') {
+      if (isTorBoxCached && torboxApiKey) {
+        const targetMagnet = magnet || `magnet:?xt=urn:btih:${targetHash}`;
+        const streamUrl = await resolveTorBoxStreamUrl(targetMagnet, torboxApiKey, selectedSeason, selectedEpisode);
+        if (streamUrl && streamUrl.startsWith('http')) {
+          launchLocalPlayer(streamUrl);
+          return;
+        }
+      } else if (url && !url.startsWith('magnet')) {
+        launchLocalPlayer(url);
+        return;
       } else {
-        setPlayingUrl(url);
-        setPlayingTitle(displayTitle);
+        alert('Ke spuštění v externím přehrávači je potřeba přímý stream nebo kešovaný TorBox torrent.');
+        return;
       }
+    }
+
+    if (url && !url.startsWith('magnet')) {
+      setPlayingUrl(url);
+      setPlayingTitle(displayTitle);
       return;
+    }
+  };
+
+  const handleCacheTorBox = async (source: StreamSource, idx: number) => {
+    const torboxApiKey = localStorage.getItem('torbox_api_key');
+    if (!torboxApiKey) {
+      alert('Chybí TorBox API klíč. Přidejte si jej v Nastavení.');
+      return;
+    }
+
+    const { infoHash, magnet } = source;
+    const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+    const magnetUrl = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
+
+    if (!magnetUrl) {
+      alert('Magnet odkaz není k dispozici.');
+      return;
+    }
+
+    setCachingIdx(idx);
+    try {
+      const res = await cacheTorBoxTorrent(magnetUrl, torboxApiKey);
+      if (res.success) {
+        setCachedSuccessIdx(idx);
+        // Mark source as cached in state
+        setSources(prev => prev.map((s, i) => i === idx ? { ...s, isTorBoxCached: true } : s));
+        setTimeout(() => setCachedSuccessIdx(null), 4000);
+      } else {
+        alert(res.message || 'Nepodařilo se přidat torrent do TorBoxu.');
+      }
+    } catch (e) {
+      console.error('TorBox cache request failed:', e);
+      alert('Chyba při komunikaci s TorBox API.');
+    } finally {
+      setCachingIdx(null);
     }
   };
 
@@ -278,7 +354,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     }
   };
 
-  // ─── TIER 1: MAIN PLUGINS LIST (Installed / Active Plugins) ───
+  // ─── TIER 1: MAIN PLUGINS LIST ───
   const availablePlugins = useMemo(() => {
     const installed = getInstalledPlugins().filter(p => p.enabled);
     const pluginsMap = new Map<string, { id: string; name: string }>();
@@ -297,13 +373,12 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     return Array.from(pluginsMap.values());
   }, [sources]);
 
-  // ─── TIER 2: SUB-SOURCES LIST (Dynamically filtered by selected Main Plugin) ───
+  // ─── TIER 2: SUB-SOURCES LIST (Filtered by selected Main Plugin) ───
   const availableSubSources = useMemo(() => {
     const subMap = new Map<string, string>();
     subMap.set('all', pluginFilter === 'all' ? 'Všechny pod-zdroje' : `Všechny pod-zdroje (${pluginFilter})`);
 
     sources.forEach(s => {
-      // If a specific plugin is selected, only collect sub-providers belonging to that plugin!
       if (pluginFilter !== 'all') {
         const matchesPlugin = (s.pluginName && s.pluginName.toLowerCase() === pluginFilter.toLowerCase()) ||
                               (s.pluginId && s.pluginId.toLowerCase() === pluginFilter.toLowerCase());
@@ -601,7 +676,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
           
           {/* TIER 1: Main Plugin / Addon Selection Pill Row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 700, minWidth: '85px' }}>Doplněk:</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 700, minWidth: '85px' }}>{t('streams.filter_source')}</span>
             {availablePlugins.map(p => (
               <button
                 key={p.id}
@@ -617,7 +692,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                   fontWeight: pluginFilter === p.id ? 700 : 500
                 }}
               >
-                {p.id === 'all' ? '📦 Všechny doplňky' : `🧩 ${p.name}`}
+                {p.id === 'all' ? `📦 ${t('streams.quick_all')}` : `🧩 ${p.name}`}
               </button>
             ))}
           </div>
@@ -625,7 +700,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
           {/* TIER 2: Sub-sources / Categories of Selected Plugin */}
           {availableSubSources.length > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', paddingLeft: '0.5rem', borderLeft: '3px solid var(--accent-color)' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '80px' }}>Pod-zdroj:</span>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '80px' }}>{t('streams.filter_subsource')}</span>
               {availableSubSources.map(sub => (
                 <button
                   key={sub.id}
@@ -651,7 +726,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
               {/* Quality Tabs */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Kvalita:</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('streams.filter_quality')}</span>
                 {[
                   { id: 'all', label: t('streams.quality_all') },
                   { id: '4k', label: t('streams.quality_4k') },
@@ -672,7 +747,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
               {/* Audio Tabs */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Jazyk:</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('streams.filter_audio')}</span>
                 {[
                   { id: 'all', label: t('streams.audio_all') },
                   { id: 'cz', label: t('streams.audio_cz') },
@@ -740,6 +815,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
               const quality = detectQuality(source);
               const audio = detectAudio(source);
               const subProviderName = source.subProvider || source.name;
+              const hasMagnetOrHash = Boolean(source.magnet || source.infoHash);
 
               return (
                 <div 
@@ -824,13 +900,14 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
                   {/* ACTIONS BUTTONS */}
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {/* Primary Web Player or Debrid Instant Play */}
                     {source.isTorBoxCached ? (
                       <button 
                         onClick={() => handlePlay(source, 'debrid')} 
                         className="btn btn-primary" 
                         style={{ backgroundColor: '#facc15', color: '#000', fontWeight: 700, padding: '0.5rem 1.1rem', fontSize: '0.9rem' }}
                       >
-                        ⚡ Instant Play
+                        {t('streams.play_debrid')}
                       </button>
                     ) : source.url && !source.url.startsWith('magnet') ? (
                       <button 
@@ -842,16 +919,39 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                       </button>
                     ) : null}
 
-                    {source.url && !source.url.startsWith('magnet') && (
-                      <button 
-                        onClick={() => handlePlay(source, 'potplayer')} 
-                        className="btn btn-secondary" 
-                        style={{ fontSize: '0.85rem', padding: '0.5rem 0.85rem' }}
+                    {/* Manual TorBox Cache Button (for un-cached torrents/magnets) */}
+                    {!source.isTorBoxCached && hasMagnetOrHash && (
+                      <button
+                        onClick={() => handleCacheTorBox(source, idx)}
+                        disabled={cachingIdx === idx}
+                        className="btn btn-secondary"
+                        style={{
+                          fontSize: '0.85rem',
+                          padding: '0.5rem 0.85rem',
+                          borderColor: cachedSuccessIdx === idx ? '#10b981' : 'rgba(234, 179, 8, 0.4)',
+                          color: cachedSuccessIdx === idx ? '#10b981' : '#facc15',
+                          backgroundColor: cachedSuccessIdx === idx ? 'rgba(16, 185, 129, 0.2)' : 'rgba(234, 179, 8, 0.08)'
+                        }}
                       >
-                        {t('streams.potplayer')}
+                        {cachingIdx === idx
+                          ? t('streams.caching')
+                          : cachedSuccessIdx === idx
+                          ? t('streams.cached_success')
+                          : t('streams.cache_debrid')}
                       </button>
                     )}
 
+                    {/* Preferred Local Player Button (PotPlayer / VLC / MPV / Infuse) */}
+                    <button 
+                      onClick={() => handlePlay(source, 'local')} 
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.85rem', padding: '0.5rem 0.85rem' }}
+                      title={`Spustit v ${preferredPlayer.toUpperCase()}`}
+                    >
+                      {getLocalPlayerLabel()}
+                    </button>
+
+                    {/* Download Button */}
                     <button 
                       onClick={() => handleDownload(source)} 
                       className="btn btn-secondary" 
@@ -860,6 +960,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                       {t('streams.download')}
                     </button>
 
+                    {/* Copy Link / Magnet */}
                     <button 
                       onClick={() => handleCopyMagnet(source, idx)} 
                       className="btn btn-secondary" 
