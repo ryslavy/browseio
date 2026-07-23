@@ -605,38 +605,47 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
             <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
               <div style={{ marginBottom: '1.5rem' }}>
                 <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.seasons')}</h3>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {availableSeasons.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => {
-                        setSelectedSeason(s);
-                        const eps = episodesList.filter(ep => ep.season === s).sort((a, b) => a.episode - b.episode);
-                        if (eps.length > 0) setSelectedEpisode(eps[0].episode);
-                      }}
-                      className={`btn ${selectedSeason === s ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{
-                        padding: '0.4rem 1rem',
-                        borderRadius: '9999px',
-                        fontSize: '0.85rem'
-                      }}
-                    >
-                      {s === 0 ? t('details.specials') : `${t('details.season')} ${s}`}
-                    </button>
-                  ))}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', padding: '0.25rem' }}>
+                  {availableSeasons.map(s => {
+                    const isSelected = selectedSeason === s;
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => {
+                          setSelectedSeason(s);
+                          const eps = episodesList.filter(ep => ep.season === s).sort((a, b) => a.episode - b.episode);
+                          if (eps.length > 0) setSelectedEpisode(eps[0].episode);
+                        }}
+                        style={{
+                          padding: '0.45rem 1.1rem',
+                          borderRadius: '9999px',
+                          fontSize: '0.85rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          border: isSelected ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+                          backgroundColor: isSelected ? '#0a84ff' : 'rgba(255, 255, 255, 0.06)',
+                          color: isSelected ? '#ffffff' : 'var(--text-secondary)',
+                          boxShadow: isSelected ? '0 4px 14px rgba(10, 132, 255, 0.45)' : 'none',
+                        }}
+                      >
+                        {s === 0 ? t('details.specials') : `${t('details.season')} ${s}`}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div>
                 <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.episodes')}</h3>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', maxHeight: '280px', overflowY: 'auto', padding: '0.25rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', maxHeight: '280px', overflowY: 'auto', padding: '0.5rem' }}>
                   {availableEpisodes.map(e => {
                     const releaseDate = e.released ? new Date(e.released).toLocaleDateString() : '';
+                    const isSelected = selectedEpisode === e.episode;
                     return (
                       <button
                         key={e.episode}
                         onClick={() => setSelectedEpisode(e.episode)}
-                        className={`btn ${selectedEpisode === e.episode ? 'btn-primary' : 'btn-secondary'}`}
                         style={{
                           padding: '0.5rem 0.9rem',
                           borderRadius: '12px',
@@ -644,14 +653,21 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                           fontSize: '0.85rem',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '0.1rem'
+                          gap: '0.1rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          border: isSelected ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+                          backgroundColor: isSelected ? '#0a84ff' : 'rgba(255, 255, 255, 0.06)',
+                          color: isSelected ? '#ffffff' : 'var(--text-primary)',
+                          boxShadow: isSelected ? '0 4px 14px rgba(10, 132, 255, 0.45)' : 'none',
                         }}
                       >
                         <span>
                           E{e.episode} {e.title && e.title.length < 22 ? `- ${e.title}` : ''}
                         </span>
                         {releaseDate && (
-                          <span style={{ fontSize: '0.7rem', opacity: 0.75 }}>
+                          <span style={{ fontSize: '0.7rem', opacity: isSelected ? 0.9 : 0.65 }}>
                             📅 {releaseDate}
                           </span>
                         )}

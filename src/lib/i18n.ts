@@ -123,6 +123,7 @@ const CS_TRANSLATIONS: TranslationMap = {
   // Movie Details Page
   'details.not_found': 'Film nebo seriál nebyl nalezen.',
   'details.back': '← Zpět na katalog',
+  'details.season': 'Série',
   'details.seasons': 'Série',
   'details.episodes': 'Epizody',
   'details.specials': 'Speciály',
@@ -280,6 +281,7 @@ const EN_TRANSLATIONS: TranslationMap = {
   // Movie Details Page
   'details.not_found': 'Movie or series not found.',
   'details.back': '← Back to Catalog',
+  'details.season': 'Season',
   'details.seasons': 'Seasons',
   'details.episodes': 'Episodes',
   'details.specials': 'Specials',
