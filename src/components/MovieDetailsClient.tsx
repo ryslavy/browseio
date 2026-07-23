@@ -119,10 +119,20 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       return;
     }
 
+    const getHashFromSource = (s: StreamSource): string => {
+      if (s.infoHash) return s.infoHash.toLowerCase();
+      const magnetStr = s.magnet || (s.url && s.url.startsWith('magnet:') ? s.url : '');
+      if (magnetStr) {
+        const match = magnetStr.match(/urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
+        if (match) return match[1].toLowerCase();
+      }
+      return '';
+    };
+
     const checkTorBoxCacheForSources = async (newSources: StreamSource[]) => {
       const hashesToCheck: string[] = [];
       newSources.forEach(s => {
-        const hash = s.infoHash || (s.magnet ? new URLSearchParams(s.magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+        const hash = getHashFromSource(s);
         if (hash) hashesToCheck.push(hash);
       });
 
@@ -132,7 +142,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         const cachedSet = await checkTorBoxCached(hashesToCheck, torboxApiKey || undefined);
         if (cachedSet.size > 0) {
           return newSources.map(s => {
-            const hash = s.infoHash || (s.magnet ? new URLSearchParams(s.magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+            const hash = getHashFromSource(s);
             if (hash && cachedSet.has(hash.toLowerCase())) {
               return { ...s, isTorBoxCached: true };
             }
