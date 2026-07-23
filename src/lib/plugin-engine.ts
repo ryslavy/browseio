@@ -139,33 +139,45 @@ export function getHashFromSource(s: Partial<StreamSource>): string {
 /**
  * Checks if a stream is a resolved Debrid HTTP stream (Real-Debrid, TorBox, AllDebrid, etc.)
  */
-export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
+export function isDebridCachedStream(s: any): boolean {
+  if (!s) return false;
   if (s.isTorBoxCached) return true;
 
-  // 1. Direct HTTP/HTTPS stream link from a Debrid resolver (e.g. RealDebrid, TorBox API, AllDebrid)
-  if (s.url && /^https?:\/\//i.test(s.url) && !s.url.toLowerCase().endsWith('.torrent')) {
-    const urlLower = s.url.toLowerCase();
+  const urlStr = s.url || s.link || s.streamUrl;
+
+  // 1. Direct HTTP/HTTPS stream link from a Debrid resolver (Real-Debrid, TorBox, AllDebrid, Premiumize, etc.)
+  if (urlStr && /^https?:\/\//i.test(urlStr) && !urlStr.toLowerCase().endsWith('.torrent')) {
+    const urlLower = urlStr.toLowerCase();
     if (
       urlLower.includes('real-debrid') ||
+      urlLower.includes('realdebrid') ||
       urlLower.includes('torbox') ||
       urlLower.includes('alldebrid') ||
       urlLower.includes('debrid-link') ||
       urlLower.includes('premiumize') ||
-      urlLower.includes('/debrid/')
+      urlLower.includes('pikpak') ||
+      urlLower.includes('/debrid/') ||
+      urlLower.includes('/rd/') ||
+      urlLower.includes('/tb/') ||
+      urlLower.includes('/ad/') ||
+      urlLower.includes('/pm/') ||
+      urlLower.includes('/dl/')
     ) {
       return true;
     }
   }
 
-  // 2. Check stream text for explicit Debrid CACHED status indicators (e.g. [TB ⚡], [RD+], etc.)
-  const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''}`;
+  // 2. Check stream text (subProvider, name, title, description, rawName) for Debrid status indicators
+  const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''} ${s.description || ''} ${s.rawName || ''}`;
   
   if (
-    /\[(RD\+|TB\+|AD\+|DL\+|PM\+)\]/i.test(streamText) ||
-    /\[(RD|TB|AD|DL|PM)\s*⚡\]/i.test(streamText) ||
+    /\[(RD|TB|AD|DL|PM|PikPak|Debrid|RealDebrid|TorBox|AllDebrid|Premiumize)(\+|\s*⚡|\s*Download|\s*Cached)?\]/i.test(streamText) ||
+    /\[(RD|TB|AD|DL|PM)\s*(\+|\b|⚡)\]/i.test(streamText) ||
     /\b(RD\+|TB\+|AD\+|DL\+|PM\+)\b/i.test(streamText) ||
+    /\b(RD|TB|AD|DL|PM)\s*⚡/i.test(streamText) ||
     /⚡\s*(RD|TB|AD|Debrid|TorBox|RealDebrid)/i.test(streamText) ||
-    s.behaviorHints?.cached === true
+    s.behaviorHints?.cached === true ||
+    s.behaviorHints?.isDebrid === true
   ) {
     return true;
   }
@@ -544,7 +556,8 @@ export async function fetchStreamsFromPlugin(
                   const fileIdx = extractFileIdx(s);
 
                   const cleanScraperName = scraper.name ? scraper.name.replace(/^[^\w\s\u00C0-\u024F\u0100-\u017F\u0180-\u024F]+/, '').trim() : plugin.name;
-                  const rawSubName = s.name ? String(s.name).split('\n')[0] : (cleanScraperName || plugin.name);
+                  const rawNameStr = s.name ? String(s.name) : (cleanScraperName || plugin.name);
+                  const rawSubName = rawNameStr.replace(/\n+/g, ' ').trim();
 
                   const isWebOnly = /hellspy|sktonline/i.test(scraper.id || '') || /hellspy|sktonline/i.test(scraper.name || '');
                   const supportsDebrid = !isWebOnly;
@@ -580,7 +593,7 @@ export async function fetchStreamsFromPlugin(
                     }
                   };
 
-                  streamObj.isTorBoxCached = isDebridCachedStream(streamObj);
+                  streamObj.isTorBoxCached = isDebridCachedStream(s) || isDebridCachedStream(streamObj);
                   streamObj.type = classifyStream(streamObj);
 
                   scraperStreams.push(streamObj);
@@ -645,7 +658,8 @@ export async function fetchStreamsFromPlugin(
       const finalMagnet = magnet || (infoHash ? `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(namePart || 'Torrent')}` : undefined);
       const fileIdx = extractFileIdx(s);
 
-      const subName = s.name ? String(s.name).split('\n')[0] : plugin.name;
+      const rawNameStr = s.name ? String(s.name) : plugin.name;
+      const subName = rawNameStr.replace(/\n+/g, ' ').trim();
 
       const isWebOnly = /hellspy|sktonline/i.test(plugin.id);
       const supportsDebrid = !isWebOnly;
@@ -681,7 +695,7 @@ export async function fetchStreamsFromPlugin(
         }
       };
 
-      streamObj.isTorBoxCached = isDebridCachedStream(streamObj);
+      streamObj.isTorBoxCached = isDebridCachedStream(s) || isDebridCachedStream(streamObj);
       streamObj.type = classifyStream(streamObj);
 
       return streamObj;
