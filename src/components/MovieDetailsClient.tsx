@@ -602,10 +602,10 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
           {/* Series Season/Episode Picker */}
           {type === 'series' && episodesList.length > 0 && (
-            <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: '20px', marginBottom: '2rem', overflow: 'visible' }}>
+            <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: '20px', marginBottom: '2rem' }}>
               <div style={{ marginBottom: '1.75rem' }}>
                 <h3 style={{ marginTop: 0, marginBottom: '0.85rem', fontSize: '1.05rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.seasons')}</h3>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', padding: '0.5rem 0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                   {availableSeasons.map(s => {
                     const isSelected = selectedSeason === s;
                     return (
@@ -616,12 +616,24 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                           const eps = episodesList.filter(ep => ep.season === s).sort((a, b) => a.episode - b.episode);
                           if (eps.length > 0) setSelectedEpisode(eps[0].episode);
                         }}
-                        className={`btn ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
+                        className="btn"
                         style={{
                           padding: '0.5rem 1.25rem',
                           borderRadius: '9999px',
                           fontSize: '0.9rem',
-                          boxShadow: isSelected ? '0 0 18px rgba(10, 132, 255, 0.65), 0 2px 8px rgba(0, 0, 0, 0.3)' : undefined
+                          fontWeight: 600,
+                          color: '#ffffff',
+                          background: isSelected 
+                            ? 'linear-gradient(135deg, rgba(10, 132, 255, 0.45) 0%, rgba(0, 112, 224, 0.3) 100%)'
+                            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%)',
+                          border: isSelected ? '1px solid rgba(10, 132, 255, 0.7)' : '1px solid rgba(255, 255, 255, 0.12)',
+                          borderTop: isSelected ? '1px solid rgba(147, 197, 253, 0.85)' : '1px solid rgba(255, 255, 255, 0.3)',
+                          borderLeft: isSelected ? '1px solid rgba(147, 197, 253, 0.5)' : '1px solid rgba(255, 255, 255, 0.2)',
+                          boxShadow: isSelected 
+                            ? '0 4px 16px rgba(10, 132, 255, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.5)'
+                            : '0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1.5px rgba(255, 255, 255, 0.3)',
+                          backdropFilter: 'blur(25px) saturate(180%)',
+                          WebkitBackdropFilter: 'blur(25px) saturate(180%)',
                         }}
                       >
                         {s === 0 ? t('details.specials') : `${t('details.season')} ${s}`}
@@ -633,7 +645,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
               <div>
                 <h3 style={{ marginTop: 0, marginBottom: '0.85rem', fontSize: '1.05rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.episodes')}</h3>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', maxHeight: '320px', overflowY: 'auto', padding: '0.75rem 0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', maxHeight: '320px', overflowY: 'auto', padding: '0.25rem' }}>
                   {availableEpisodes.map(e => {
                     const releaseDate = e.released ? new Date(e.released).toLocaleDateString() : '';
                     const isSelected = selectedEpisode === e.episode;
@@ -641,7 +653,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                       <button
                         key={e.episode}
                         onClick={() => setSelectedEpisode(e.episode)}
-                        className={`btn ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
+                        className="btn"
                         style={{
                           padding: '0.55rem 1rem',
                           borderRadius: '14px',
@@ -650,7 +662,19 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                           display: 'flex',
                           flexDirection: 'column',
                           gap: '0.15rem',
-                          boxShadow: isSelected ? '0 0 18px rgba(10, 132, 255, 0.65), 0 2px 8px rgba(0, 0, 0, 0.3)' : undefined
+                          fontWeight: 600,
+                          color: '#ffffff',
+                          background: isSelected 
+                            ? 'linear-gradient(135deg, rgba(10, 132, 255, 0.45) 0%, rgba(0, 112, 224, 0.3) 100%)'
+                            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%)',
+                          border: isSelected ? '1px solid rgba(10, 132, 255, 0.7)' : '1px solid rgba(255, 255, 255, 0.12)',
+                          borderTop: isSelected ? '1px solid rgba(147, 197, 253, 0.85)' : '1px solid rgba(255, 255, 255, 0.3)',
+                          borderLeft: isSelected ? '1px solid rgba(147, 197, 253, 0.5)' : '1px solid rgba(255, 255, 255, 0.2)',
+                          boxShadow: isSelected 
+                            ? '0 4px 16px rgba(10, 132, 255, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.5)'
+                            : '0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1.5px rgba(255, 255, 255, 0.3)',
+                          backdropFilter: 'blur(25px) saturate(180%)',
+                          WebkitBackdropFilter: 'blur(25px) saturate(180%)',
                         }}
                       >
                         <span>
