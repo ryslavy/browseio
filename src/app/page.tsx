@@ -97,6 +97,13 @@ function CatalogContent() {
   const updateUrlParams = useCallback(
     (updates: Record<string, string | undefined>) => {
       const params = new URLSearchParams(searchParams.toString());
+      
+      // Always guarantee catalog view and current media type
+      params.set('view', 'catalog');
+      if (!params.has('type')) {
+        params.set('type', typeParam);
+      }
+
       Object.entries(updates).forEach(([key, val]) => {
         if (
           val === undefined ||
@@ -109,11 +116,12 @@ function CatalogContent() {
           params.set(key, val);
         }
       });
+
       const query = params.toString();
       const newUrl = query ? `${pathname}?${query}` : pathname;
       router.replace(newUrl);
     },
-    [searchParams, router, pathname]
+    [searchParams, router, pathname, typeParam]
   );
 
   const currentGenres = typeParam === 'movie' ? MOVIE_GENRES : SERIES_GENRES;
