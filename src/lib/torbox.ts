@@ -1,6 +1,8 @@
 // TorBox Debrid API client for BrowseIO
 // Proxies TorBox API requests through working CORS proxies (https://cors.eu.org/) to bypass browser CORS origin restrictions.
 
+import { normalizeInfoHash, safeDecodeFileName } from './plugin-engine.ts';
+
 const TORBOX_API_BASE = 'https://api.torbox.app/v1/api';
 
 export interface TorBoxCachedResponse {
@@ -74,12 +76,26 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
   throw new Error(`TORBOX_FETCH_FAILED: ${url}`);
 }
 
+/**
+ * Normalizes input infoHashes and queries TorBox checkcached API endpoint.
+ * Returns a Set of lower-case 40-character hex infoHashes that are cached on TorBox.
+ */
 export async function checkTorBoxCached(hashes: string[], apiKey?: string): Promise<Set<string>> {
   const cachedHashes = new Set<string>();
   if (!hashes || hashes.length === 0) return cachedHashes;
 
+  const cleanHashes = Array.from(
+    new Set(
+      hashes
+        .map(h => normalizeInfoHash(h))
+        .filter((h): h is string => Boolean(h))
+    )
+  );
+
+  if (cleanHashes.length === 0) return cachedHashes;
+
   try {
-    const hashList = hashes.join(',');
+    const hashList = cleanHashes.join(',');
     const targetUrl = `${TORBOX_API_BASE}/torrents/checkcached?hash=${hashList}&format=object`;
 
     const res = await torboxFetch(targetUrl, { method: 'GET' }, apiKey);
@@ -89,7 +105,8 @@ export async function checkTorBoxCached(hashes: string[], apiKey?: string): Prom
       Object.keys(json.data).forEach(hash => {
         const val = json.data[hash];
         if (val) {
-          cachedHashes.add(hash.toLowerCase());
+          const normKey = normalizeInfoHash(hash) || hash.toLowerCase();
+          cachedHashes.add(normKey);
         }
       });
     }
@@ -100,10 +117,24 @@ export async function checkTorBoxCached(hashes: string[], apiKey?: string): Prom
   return cachedHashes;
 }
 
-export async function resolveTorBoxStreamUrl(magnetOrHash: string, apiKey: string, season?: number, episode?: number): Promise<string | null> {
+/**
+ * Resolves a stream direct play URL from TorBox for a given magnet or infoHash.
+ * Handles 40-char hex, magnet URLs, season/episode matching, fileIdx, UTF-8 diacritics, and largest video fallback.
+ */
+export async function resolveTorBoxStreamUrl(
+  magnetOrHash: string,
+  apiKey: string,
+  season?: number,
+  episode?: number,
+  fileIdx?: number
+): Promise<string | null> {
   if (!apiKey) return null;
 
-  const magnet = magnetOrHash.startsWith('magnet:') ? magnetOrHash : `magnet:?xt=urn:btih:${magnetOrHash}`;
+  let magnet = magnetOrHash;
+  if (!magnet.startsWith('magnet:')) {
+    const normHash = normalizeInfoHash(magnetOrHash);
+    magnet = normHash ? `magnet:?xt=urn:btih:${normHash}` : magnetOrHash;
+  }
 
   try {
     const bodyData = new URLSearchParams();
@@ -132,34 +163,68 @@ export async function resolveTorBoxStreamUrl(magnetOrHash: string, apiKey: strin
     }
 
     let fileIdQuery = '';
-    if (season !== undefined && episode !== undefined) {
-      try {
-        const listUrl = `${TORBOX_API_BASE}/torrents/mylist`;
-        const listRes = await torboxFetch(listUrl, { method: 'GET' }, apiKey);
-        const listJson = await listRes.json();
 
-        if (listJson.success && listJson.data && Array.isArray(listJson.data)) {
-          const torrent = listJson.data.find((t: any) => t.id === torrentId || t.torrent_id === torrentId);
-          if (torrent && torrent.files && Array.isArray(torrent.files)) {
+    try {
+      const listUrl = `${TORBOX_API_BASE}/torrents/mylist`;
+      const listRes = await torboxFetch(listUrl, { method: 'GET' }, apiKey);
+      const listJson = await listRes.json();
+
+      if (listJson.success && listJson.data && Array.isArray(listJson.data)) {
+        const torrent = listJson.data.find((t: any) => t.id === torrentId || t.torrent_id === torrentId);
+        if (torrent && torrent.files && Array.isArray(torrent.files) && torrent.files.length > 0) {
+          let selectedFile: any = null;
+
+          // 1. If explicit fileIdx is provided
+          if (typeof fileIdx === 'number' && fileIdx >= 0) {
+            selectedFile = torrent.files.find((f: any) => f.id === fileIdx || f.id === String(fileIdx) || f.file_id === fileIdx);
+            if (!selectedFile && torrent.files[fileIdx]) {
+              selectedFile = torrent.files[fileIdx];
+            }
+          }
+
+          // 2. If season and episode are specified
+          if (!selectedFile && season !== undefined && episode !== undefined) {
             const regexes = [
               new RegExp(`s0*${season}e0*${episode}[^a-z0-9]`, 'i'),
               new RegExp(`0*${season}x0*${episode}[^a-z0-9]`, 'i'),
               new RegExp(`s0*${season}.*e0*${episode}`, 'i'),
-              new RegExp(`[^a-z0-9]0*${episode}[^a-z0-9]`, 'i')
+              new RegExp(`[^a-z0-9]0*${episode}[^a-z0-9]`, 'i'),
+              new RegExp(`e0*${episode}[^a-z0-9]`, 'i')
             ];
 
             for (const regex of regexes) {
-              const match = torrent.files.find((f: any) => regex.test(f.name));
+              const match = torrent.files.find((f: any) => {
+                const rawName = f.name || f.short_name || f.absolute_path || '';
+                const decodedName = safeDecodeFileName(rawName) || rawName;
+                return regex.test(decodedName) || regex.test(rawName);
+              });
               if (match) {
-                fileIdQuery = `&file_id=${match.id}`;
+                selectedFile = match;
                 break;
               }
             }
           }
+
+          // 3. Fallback: largest video file selection for multi-file torrent packs
+          if (!selectedFile && torrent.files.length > 1) {
+            const videoRegex = /\.(mkv|mp4|avi|mov|m4v|webm|flv|wmv|ts)$/i;
+            const videoFiles = torrent.files.filter((f: any) => {
+              const decoded = safeDecodeFileName(f.name) || f.name || '';
+              return videoRegex.test(decoded);
+            });
+
+            const candidateFiles = videoFiles.length > 0 ? videoFiles : torrent.files;
+            candidateFiles.sort((a: any, b: any) => (b.size || 0) - (a.size || 0));
+            selectedFile = candidateFiles[0];
+          }
+
+          if (selectedFile && selectedFile.id !== undefined) {
+            fileIdQuery = `&file_id=${selectedFile.id}`;
+          }
         }
-      } catch (e) {
-        console.error('Failed to find file_id for TorBox stream:', e);
       }
+    } catch (e) {
+      console.error('Failed to select file_id for TorBox stream:', e);
     }
 
     const dlUrl = `${TORBOX_API_BASE}/torrents/requestdl?token=${encodeURIComponent(apiKey)}&torrent_id=${torrentId}${fileIdQuery}`;
@@ -178,9 +243,17 @@ export async function resolveTorBoxStreamUrl(magnetOrHash: string, apiKey: strin
   return null;
 }
 
+/**
+ * Universally adds a torrent or magnet link to user's TorBox account via POST createtorrent.
+ */
 export async function cacheTorBoxTorrent(magnetOrHash: string, apiKey: string): Promise<{ success: boolean; message: string }> {
   if (!apiKey) return { success: false, message: 'Chybí TorBox API klíč' };
-  const magnetUrl = magnetOrHash.startsWith('magnet:') ? magnetOrHash : `magnet:?xt=urn:btih:${magnetOrHash}`;
+
+  let magnetUrl = magnetOrHash;
+  if (!magnetUrl.startsWith('magnet:')) {
+    const normHash = normalizeInfoHash(magnetOrHash);
+    magnetUrl = normHash ? `magnet:?xt=urn:btih:${normHash}` : magnetOrHash;
+  }
 
   try {
     const bodyData = new URLSearchParams();

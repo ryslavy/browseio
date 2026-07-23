@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
-import { getInstalledPlugins, fetchStreamsFromPlugin, StreamSource, normalizeInfoHash, isDebridCachedStream } from '@/lib/plugin-engine';
+import { getInstalledPlugins, fetchStreamsFromPlugin, StreamSource, normalizeInfoHash, getHashFromSource, isDebridCachedStream, classifyStream, extractFileIdx } from '@/lib/plugin-engine';
 import { checkTorBoxCached, resolveTorBoxStreamUrl, cacheTorBoxTorrent } from '@/lib/torbox';
 import { t, getCurrentLanguage, i18nEventTarget } from '@/lib/i18n';
 
@@ -124,10 +124,6 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       return;
     }
 
-    const getHashFromSource = (s: StreamSource): string => {
-      return normalizeInfoHash(s.infoHash || s.magnet || s.url || s.behaviorHints?.infoHash || '');
-    };
-
     const checkTorBoxCacheForSources = async (newSources: StreamSource[]) => {
       const hashesToCheck: string[] = [];
       
@@ -226,13 +222,14 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
   const handlePlay = async (source: StreamSource, mode: 'debrid' | 'direct' | 'local' = 'direct') => {
     const torboxApiKey = localStorage.getItem('torbox_api_key');
-    const { infoHash, magnet, url, isTorBoxCached } = source;
-    const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+    const { magnet, url, isTorBoxCached } = source;
+    const targetHash = getHashFromSource(source) || source.infoHash || '';
+    const fileIdx = extractFileIdx(source);
     const sourceName = source.name || 'P2P Stream';
 
     const displayTitle = meta?.name ? `${meta.name}${meta.releaseInfo ? ` (${meta.releaseInfo})` : ''}` : sourceName;
 
-    // If stream is already a direct HTTP(S) Debrid link (e.g. Torrentio RD / KnightCrawler RD / Nuvio)
+    // If stream is already a direct HTTP(S) Web or Debrid link
     if (url && /^https?:\/\//i.test(url) && !url.toLowerCase().endsWith('.torrent')) {
       if (mode === 'local') {
         launchLocalPlayer(url);
@@ -245,8 +242,8 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
     if (mode === 'debrid' && isTorBoxCached && torboxApiKey) {
       try {
-        const targetMagnet = magnet || `magnet:?xt=urn:btih:${targetHash}`;
-        const streamUrl = await resolveTorBoxStreamUrl(targetMagnet, torboxApiKey, selectedSeason, selectedEpisode);
+        const targetMagnet = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : '');
+        const streamUrl = await resolveTorBoxStreamUrl(targetMagnet, torboxApiKey, selectedSeason, selectedEpisode, fileIdx);
         if (streamUrl && streamUrl.startsWith('http')) {
           setPlayingUrl(streamUrl);
           setPlayingTitle(displayTitle);
@@ -261,8 +258,8 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
     if (mode === 'local') {
       if (isTorBoxCached && torboxApiKey) {
-        const targetMagnet = magnet || `magnet:?xt=urn:btih:${targetHash}`;
-        const streamUrl = await resolveTorBoxStreamUrl(targetMagnet, torboxApiKey, selectedSeason, selectedEpisode);
+        const targetMagnet = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : '');
+        const streamUrl = await resolveTorBoxStreamUrl(targetMagnet, torboxApiKey, selectedSeason, selectedEpisode, fileIdx);
         if (streamUrl && streamUrl.startsWith('http')) {
           launchLocalPlayer(streamUrl);
           return;
@@ -290,7 +287,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       return;
     }
 
-    const targetHash = normalizeInfoHash(source.infoHash || source.behaviorHints?.infoHash || source.magnet || source.url || '');
+    const targetHash = getHashFromSource(source);
     const magnetUrl = source.magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}&dn=${encodeURIComponent(source.title || 'Torrent')}` : null);
 
     if (!magnetUrl) {
@@ -319,13 +316,14 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
   const handleDownload = async (source: StreamSource) => {
     const torboxApiKey = localStorage.getItem('torbox_api_key');
-    const { infoHash, magnet, url, isTorBoxCached } = source;
-    const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
+    const { magnet, url, isTorBoxCached } = source;
+    const targetHash = getHashFromSource(source) || source.infoHash || '';
+    const fileIdx = extractFileIdx(source);
 
     if (isTorBoxCached && torboxApiKey) {
       try {
-        const targetMagnet = magnet || `magnet:?xt=urn:btih:${targetHash}`;
-        const streamUrl = await resolveTorBoxStreamUrl(targetMagnet, torboxApiKey, selectedSeason, selectedEpisode);
+        const targetMagnet = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : '');
+        const streamUrl = await resolveTorBoxStreamUrl(targetMagnet, torboxApiKey, selectedSeason, selectedEpisode, fileIdx);
         if (streamUrl && streamUrl.startsWith('http')) {
           const a = document.createElement('a');
           a.href = streamUrl;
@@ -873,9 +871,10 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
               const audio = detectAudio(source);
               const subProviderName = source.subProvider || source.name;
               
-              const isMagnetOrP2P = Boolean(source.magnet || source.infoHash || (source.url && (source.url.startsWith('magnet:') || source.url.toLowerCase().endsWith('.torrent'))));
-              const isDebridStream = Boolean(source.isTorBoxCached || isDebridCachedStream(source));
-              const isDirectWebStream = Boolean(source.url && /^https?:\/\//i.test(source.url) && !isDebridStream && !isMagnetOrP2P);
+              const streamType = classifyStream(source);
+              const isDebridStream = streamType === 'debrid';
+              const isMagnetOrP2P = streamType === 'torrent';
+              const isDirectWebStream = streamType === 'web';
 
               return (
                 <div 
@@ -985,16 +984,16 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                       </button>
                     ) : (
                       <button 
-                        onClick={() => handlePlay(source, 'direct')} 
+                        onClick={() => { alert('Tento magnet link je nutné nejprve nacachovat na TorBox (pokud je podporován) nebo otevřít ve vašem torrent klientovi (pomocí tlačítka Stáhnout). Nativní webový přehrávač aktuálně nepodporuje přímé P2P streamování.'); }} 
                         className="btn btn-primary"
-                        style={{ padding: '0.5rem 1.1rem', fontSize: '0.9rem', fontWeight: 700 }}
+                        style={{ padding: '0.5rem 1.1rem', fontSize: '0.9rem', fontWeight: 700, opacity: 0.6 }}
                       >
-                        {t('streams.play_webtor')}
+                        Nelze přehrát přímo
                       </button>
                     )}
 
                     {/* Manual TorBox Cache Button (ONLY for P2P magnets that are not cached yet) */}
-                    {isMagnetOrP2P && !source.isTorBoxCached && (
+                    {isMagnetOrP2P && !source.isTorBoxCached && source.capabilities?.supportsDebrid !== false && (
                       <button
                         onClick={() => handleCacheTorBox(source, idx)}
                         disabled={cachingIdx === idx}

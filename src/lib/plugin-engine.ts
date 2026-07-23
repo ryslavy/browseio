@@ -14,6 +14,22 @@ export interface PluginManifest {
   isBuiltIn?: boolean;
 }
 
+export interface BehaviorHints {
+  proxyHeaders?: {
+    request?: Record<string, string>;
+    response?: Record<string, string>;
+    [key: string]: any;
+  };
+  notSupported?: boolean;
+  fileName?: string;
+  videoHash?: string;
+  bingeGroup?: string;
+  infoHash?: string;
+  cached?: boolean;
+  fileIdx?: number;
+  [key: string]: any;
+}
+
 export interface StreamSource {
   name: string;
   pluginId?: string;
@@ -23,15 +39,21 @@ export interface StreamSource {
   url?: string | null;
   magnet?: string;
   infoHash?: string;
+  fileIdx?: number;
+  type?: 'web' | 'debrid' | 'torrent';
   size?: string;
   seeders?: number;
   isTorBoxCached?: boolean;
   headers?: Record<string, string>;
   subtitles?: any[];
-  behaviorHints?: any;
+  behaviorHints?: BehaviorHints;
+  capabilities?: {
+    supportsDebrid?: boolean;
+    isWebOnly?: boolean;
+  };
 }
 
-function base32ToHex(base32: string): string {
+export function base32ToHex(base32: string): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   let bits = '';
   let hex = '';
@@ -48,12 +70,25 @@ function base32ToHex(base32: string): string {
   return hex.toLowerCase();
 }
 
+/**
+ * Normalizes a torrent infoHash or magnet string into a clean 40-character lower-case hex hash.
+ * DO NOT extract 40-char hex strings from standard web HTTP stream URLs (e.g. Hellspy direct URLs).
+ */
 export function normalizeInfoHash(hashOrMagnet?: string): string {
   if (!hashOrMagnet) return '';
   const clean = hashOrMagnet.trim();
-  
-  const hexMatch = clean.match(/\b([a-fA-F0-9]{40})\b/);
-  if (hexMatch) return hexMatch[1].toLowerCase();
+  if (!clean) return '';
+
+  // DO NOT extract hex tokens from standard HTTP/HTTPS URLs unless it explicitly contains a BTIH parameter
+  if (/^https?:\/\//i.test(clean)) {
+    const btihMatchInUrl = clean.match(/urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
+    if (btihMatchInUrl) {
+      const raw = btihMatchInUrl[1];
+      if (raw.length === 40) return raw.toLowerCase();
+      if (raw.length === 32) return base32ToHex(raw);
+    }
+    return '';
+  }
 
   const btihMatch = clean.match(/urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
   if (btihMatch) {
@@ -62,6 +97,9 @@ export function normalizeInfoHash(hashOrMagnet?: string): string {
     if (raw.length === 32) return base32ToHex(raw);
   }
 
+  const hexMatch = clean.match(/\b([a-fA-F0-9]{40})\b/);
+  if (hexMatch) return hexMatch[1].toLowerCase();
+
   if (/^[a-zA-Z2-7]{32}$/.test(clean)) {
     return base32ToHex(clean);
   }
@@ -69,6 +107,38 @@ export function normalizeInfoHash(hashOrMagnet?: string): string {
   return '';
 }
 
+/**
+ * Safely extracts a torrent infoHash from a StreamSource.
+ * Only extracts if explicitly provided via infoHash property, behaviorHints, magnet URI, or torrent stream descriptor.
+ */
+export function getHashFromSource(s: Partial<StreamSource>): string {
+  if (!s) return '';
+  if (s.infoHash) {
+    const norm = normalizeInfoHash(s.infoHash);
+    if (norm) return norm;
+  }
+  if (s.behaviorHints?.infoHash) {
+    const norm = normalizeInfoHash(s.behaviorHints.infoHash);
+    if (norm) return norm;
+  }
+  if (s.magnet) {
+    const norm = normalizeInfoHash(s.magnet);
+    if (norm) return norm;
+  }
+  if (s.url && s.url.startsWith('magnet:')) {
+    const norm = normalizeInfoHash(s.url);
+    if (norm) return norm;
+  }
+  if ((s.type === 'torrent' || s.url?.toLowerCase().endsWith('.torrent')) && s.url) {
+    const norm = normalizeInfoHash(s.url);
+    if (norm) return norm;
+  }
+  return '';
+}
+
+/**
+ * Checks if a stream is a resolved Debrid HTTP stream (Real-Debrid, TorBox, AllDebrid, etc.)
+ */
 export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
   if (s.isTorBoxCached) return true;
 
@@ -87,11 +157,12 @@ export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
     }
   }
 
-  // 2. Check ONLY the specific stream's title and name (do NOT check global plugin name or plugin description)
+  // 2. Check stream text for explicit Debrid CACHED status indicators (e.g. [TB ⚡], [RD+], etc.)
   const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''}`;
   
   if (
-    /\[(RD\+?|TB\+?|AD\+?|DL\+?|PM\+?)\]/i.test(streamText) ||
+    /\[(RD\+|TB\+|AD\+|DL\+|PM\+)\]/i.test(streamText) ||
+    /\[(RD|TB|AD|DL|PM)\s*⚡\]/i.test(streamText) ||
     /\b(RD\+|TB\+|AD\+|DL\+|PM\+)\b/i.test(streamText) ||
     /⚡\s*(RD|TB|AD|Debrid|TorBox|RealDebrid)/i.test(streamText) ||
     s.behaviorHints?.cached === true
@@ -100,6 +171,65 @@ export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
   }
 
   return false;
+}
+
+/**
+ * Classifies a stream source as 'web', 'debrid', or 'torrent'.
+ * - 'web': Direct Web HTTP links (e.g. Hellspy web streams, mp4/m3u8 URLs)
+ * - 'debrid': Resolved Debrid HTTP streams from Real-Debrid, TorBox, AllDebrid, etc.
+ * - 'torrent': P2P Torrents containing explicit infoHash, magnet link, or Stremio torrent properties
+ */
+export function classifyStream(s: Partial<StreamSource>): 'web' | 'debrid' | 'torrent' {
+  if (s.capabilities?.isWebOnly) {
+    return 'web';
+  }
+
+  if (isDebridCachedStream(s)) {
+    return 'debrid';
+  }
+
+  const hash = getHashFromSource(s);
+  const isTorrent = Boolean(
+    hash ||
+    s.magnet ||
+    s.infoHash ||
+    (s.url && (s.url.startsWith('magnet:') || s.url.toLowerCase().endsWith('.torrent'))) ||
+    s.type === 'torrent'
+  );
+
+  if (isTorrent) {
+    return 'torrent';
+  }
+
+  if (s.url && /^https?:\/\//i.test(s.url)) {
+    return 'web';
+  }
+
+  return 'web';
+}
+
+export function safeDecodeFileName(fileName?: string): string | undefined {
+  if (!fileName) return undefined;
+  try {
+    if (fileName.includes('%')) {
+      return decodeURIComponent(fileName);
+    }
+  } catch (e) {
+    // Return original if URI malformed
+  }
+  return fileName;
+}
+
+export function extractFileIdx(s: any): number | undefined {
+  if (typeof s.fileIdx === 'number') return s.fileIdx;
+  if (typeof s.fileIdx === 'string' && !isNaN(parseInt(s.fileIdx, 10))) return parseInt(s.fileIdx, 10);
+  if (typeof s.file_index === 'number') return s.file_index;
+  if (typeof s.file_index === 'string' && !isNaN(parseInt(s.file_index, 10))) return parseInt(s.file_index, 10);
+  if (typeof s.fileIndex === 'number') return s.fileIndex;
+  if (typeof s.fileIndex === 'string' && !isNaN(parseInt(s.fileIndex, 10))) return parseInt(s.fileIndex, 10);
+  if (typeof s.behaviorHints?.fileIdx === 'number') return s.behaviorHints.fileIdx;
+  if (typeof s.behaviorHints?.fileIdx === 'string' && !isNaN(parseInt(s.behaviorHints.fileIdx, 10))) return parseInt(s.behaviorHints.fileIdx, 10);
+  return undefined;
 }
 
 const STORAGE_KEY = 'browseio_installed_plugins';
@@ -366,7 +496,7 @@ export async function fetchStreamsFromPlugin(
               const targetType = type === 'series' ? 'tv' : 'movie';
               let raw: any = null;
 
-              // 1. Try object argument signature first (allows scrapers to skip redundant title resolution)
+              // 1. Try object argument signature first
               try {
                 raw = await getStreamsFn({
                   tmdbId: id,
@@ -407,12 +537,27 @@ export async function fetchStreamsFromPlugin(
 
                   const urlStr = s.url || s.link || s.streamUrl || s.downloadUrl || s.file;
                   const magnet = (urlStr && urlStr.startsWith('magnet:')) ? urlStr : (s.magnet || undefined);
-                  const rawHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash || magnet || urlStr;
-                  const infoHash = normalizeInfoHash(rawHash);
+                  
+                  const explicitHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash;
+                  const infoHash = explicitHash ? normalizeInfoHash(explicitHash) : (magnet ? normalizeInfoHash(magnet) : undefined);
                   const finalMagnet = magnet || (infoHash ? `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(namePart || 'Torrent')}` : undefined);
+                  const fileIdx = extractFileIdx(s);
 
-                  const cleanScraperName = scraper.name ? scraper.name.replace(/^[^\w\s\u00C0-\u024F]+/, '').trim() : plugin.name;
-                  const rawSubName = s.name || cleanScraperName || plugin.name;
+                  const cleanScraperName = scraper.name ? scraper.name.replace(/^[^\w\s\u00C0-\u024F\u0100-\u017F\u0180-\u024F]+/, '').trim() : plugin.name;
+                  const rawSubName = s.name ? String(s.name).split('\n')[0] : (cleanScraperName || plugin.name);
+
+                  const isWebOnly = /hellspy|sktonline/i.test(scraper.id || '') || /hellspy|sktonline/i.test(scraper.name || '');
+                  const supportsDebrid = !isWebOnly;
+
+                  const behaviorHints: BehaviorHints = {
+                    ...(s.behaviorHints || {}),
+                    ...(s.behaviorHints?.proxyHeaders ? { proxyHeaders: s.behaviorHints.proxyHeaders } : {}),
+                    ...(s.behaviorHints?.notSupported !== undefined ? { notSupported: s.behaviorHints.notSupported } : {}),
+                    ...(s.behaviorHints?.fileName ? { fileName: safeDecodeFileName(s.behaviorHints.fileName) } : {}),
+                    ...(s.behaviorHints?.videoHash ? { videoHash: s.behaviorHints.videoHash } : {}),
+                    ...(s.behaviorHints?.bingeGroup ? { bingeGroup: s.behaviorHints.bingeGroup } : {}),
+                    ...(fileIdx !== undefined ? { fileIdx: fileIdx } : {})
+                  };
 
                   const streamObj: StreamSource = {
                     name: rawSubName,
@@ -423,14 +568,20 @@ export async function fetchStreamsFromPlugin(
                     url: urlStr && !urlStr.startsWith('magnet:') ? urlStr : undefined,
                     magnet: finalMagnet,
                     infoHash: infoHash || undefined,
+                    fileIdx: fileIdx,
                     size: size,
                     seeders: seeders,
-                    headers: s.behaviorHints?.proxyHeaders?.request,
+                    headers: s.behaviorHints?.proxyHeaders?.request || s.headers,
                     subtitles: s.subtitles,
-                    behaviorHints: s.behaviorHints
+                    behaviorHints: behaviorHints,
+                    capabilities: {
+                      supportsDebrid,
+                      isWebOnly
+                    }
                   };
 
                   streamObj.isTorBoxCached = isDebridCachedStream(streamObj);
+                  streamObj.type = classifyStream(streamObj);
 
                   scraperStreams.push(streamObj);
                   results.push(streamObj);
@@ -488,11 +639,26 @@ export async function fetchStreamsFromPlugin(
 
       const urlStr = s.url || s.link || s.streamUrl;
       const magnet = (urlStr && urlStr.startsWith('magnet:')) ? urlStr : (s.magnet || undefined);
-      const rawHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash || magnet || urlStr;
-      const infoHash = normalizeInfoHash(rawHash);
+
+      const explicitHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash;
+      const infoHash = explicitHash ? normalizeInfoHash(explicitHash) : (magnet ? normalizeInfoHash(magnet) : undefined);
       const finalMagnet = magnet || (infoHash ? `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(namePart || 'Torrent')}` : undefined);
+      const fileIdx = extractFileIdx(s);
 
       const subName = s.name ? String(s.name).split('\n')[0] : plugin.name;
+
+      const isWebOnly = /hellspy|sktonline/i.test(plugin.id);
+      const supportsDebrid = !isWebOnly;
+
+      const behaviorHints: BehaviorHints = {
+        ...(s.behaviorHints || {}),
+        ...(s.behaviorHints?.proxyHeaders ? { proxyHeaders: s.behaviorHints.proxyHeaders } : {}),
+        ...(s.behaviorHints?.notSupported !== undefined ? { notSupported: s.behaviorHints.notSupported } : {}),
+        ...(s.behaviorHints?.fileName ? { fileName: safeDecodeFileName(s.behaviorHints.fileName) } : {}),
+        ...(s.behaviorHints?.videoHash ? { videoHash: s.behaviorHints.videoHash } : {}),
+        ...(s.behaviorHints?.bingeGroup ? { bingeGroup: s.behaviorHints.bingeGroup } : {}),
+        ...(fileIdx !== undefined ? { fileIdx: fileIdx } : {})
+      };
 
       const streamObj: StreamSource = {
         name: subName,
@@ -503,14 +669,20 @@ export async function fetchStreamsFromPlugin(
         url: urlStr && !urlStr.startsWith('magnet:') ? urlStr : undefined,
         magnet: finalMagnet,
         infoHash: infoHash || undefined,
+        fileIdx: fileIdx,
         size: size,
         seeders: seeders,
         headers: s.behaviorHints?.proxyHeaders?.request,
         subtitles: s.subtitles,
-        behaviorHints: s.behaviorHints
+        behaviorHints: behaviorHints,
+        capabilities: {
+          supportsDebrid,
+          isWebOnly
+        }
       };
 
       streamObj.isTorBoxCached = isDebridCachedStream(streamObj);
+      streamObj.type = classifyStream(streamObj);
 
       return streamObj;
     });
