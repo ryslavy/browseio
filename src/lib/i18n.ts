@@ -42,6 +42,11 @@ const CS_TRANSLATIONS: TranslationMap = {
 
   // Catalog & Search
   'catalog.title': 'BrowseIO',
+  'catalog.hero_subtitle': 'Objevujte a streamujte tisíce filmů a seriálů s okamžitým propojením na Stremio Addony, Nuvio pluginy a TorBox Debrid akceleraci.',
+  'catalog.badge_addons': '🧩 Stremio & Nuvio Addony',
+  'catalog.badge_debrid': '⚡ TorBox Instant Debrid',
+  'catalog.badge_players': '🍿 PotPlayer & Web Player',
+  'catalog.clear_search': 'Vymazat hledání',
   'catalog.movies': 'Filmy',
   'catalog.series': 'Seriály',
   'catalog.popular': 'Populární',
@@ -194,6 +199,11 @@ const EN_TRANSLATIONS: TranslationMap = {
 
   // Catalog & Search
   'catalog.title': 'BrowseIO',
+  'catalog.hero_subtitle': 'Discover and stream thousands of movies and series with instant integration for Stremio Addons, Nuvio plugins, and TorBox Debrid acceleration.',
+  'catalog.badge_addons': '🧩 Stremio & Nuvio Addons',
+  'catalog.badge_debrid': '⚡ TorBox Instant Debrid',
+  'catalog.badge_players': '🍿 PotPlayer & Web Player',
+  'catalog.clear_search': 'Clear search',
   'catalog.movies': 'Movies',
   'catalog.series': 'Series',
   'catalog.popular': 'Popular',

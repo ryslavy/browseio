@@ -106,7 +106,7 @@ export function FilterBar({
                   padding: 0,
                   transition: 'background 0.2s ease',
                 }}
-                title="Vymazat hledání"
+                title={t('catalog.clear_search')}
               >
                 ✕
               </button>

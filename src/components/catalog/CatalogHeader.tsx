@@ -45,19 +45,19 @@ export function CatalogHeader({
       </h1>
 
       <p style={{ maxWidth: '640px', margin: '0 auto 1.5rem auto', color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.6 }}>
-        Objevujte a streamujte tisíce filmů a seriálů s okamžitým propojením na Stremio Addony, Nuvio pluginy a TorBox Debrid akceleraci.
+        {t('catalog.hero_subtitle')}
       </p>
 
       {/* Feature Badges */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: '0.6rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
         <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem', fontWeight: 600 }}>
-          🧩 Stremio & Nuvio Addony
+          {t('catalog.badge_addons')}
         </span>
         <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#fbbf24', border: '1px solid rgba(234, 179, 8, 0.3)', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem', fontWeight: 600 }}>
-          ⚡ TorBox Instant Debrid
+          {t('catalog.badge_debrid')}
         </span>
         <span style={{ backgroundColor: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.3)', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem', fontWeight: 600 }}>
-          🍿 PotPlayer & Web Player
+          {t('catalog.badge_players')}
         </span>
       </div>
 
