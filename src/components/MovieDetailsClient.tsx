@@ -142,7 +142,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
           return updatedSources.map(s => {
             const hash = getHashFromSource(s);
             if (hash && cachedSet.has(hash.toLowerCase())) {
-              return { ...s, isTorBoxCached: true };
+              return { ...s, isTorBoxCached: true, type: 'debrid' as const };
             }
             return s;
           });

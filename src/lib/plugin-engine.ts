@@ -79,17 +79,7 @@ export function normalizeInfoHash(hashOrMagnet?: string): string {
   const clean = hashOrMagnet.trim();
   if (!clean) return '';
 
-  // DO NOT extract hex tokens from standard HTTP/HTTPS URLs unless it explicitly contains a BTIH parameter
-  if (/^https?:\/\//i.test(clean)) {
-    const btihMatchInUrl = clean.match(/urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
-    if (btihMatchInUrl) {
-      const raw = btihMatchInUrl[1];
-      if (raw.length === 40) return raw.toLowerCase();
-      if (raw.length === 32) return base32ToHex(raw);
-    }
-    return '';
-  }
-
+  // 1. Check for urn:btih: pattern anywhere
   const btihMatch = clean.match(/urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
   if (btihMatch) {
     const raw = btihMatch[1];
@@ -97,6 +87,28 @@ export function normalizeInfoHash(hashOrMagnet?: string): string {
     if (raw.length === 32) return base32ToHex(raw);
   }
 
+  // 2. Check for explicit hash parameters in URLs or strings (e.g. ?hash=..., ?btih=..., /hash/...)
+  const paramMatch = clean.match(/(?:hash|btih|infohash)[=/:]+([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})/i);
+  if (paramMatch) {
+    const raw = paramMatch[1];
+    if (raw.length === 40) return raw.toLowerCase();
+    if (raw.length === 32) return base32ToHex(raw);
+  }
+
+  // 3. If it's an HTTP/HTTPS URL
+  if (/^https?:\/\//i.test(clean)) {
+    // Avoid extracting hashes from direct video streams (e.g. hellspy, direct mp4/mkv/m3u8 URLs)
+    const isDirectVideoMedia = /\.(mp4|mkv|m3u8|avi|mov|flv|webm)(\?.*)?$/i.test(clean) || /hellspy|sktonline/i.test(clean);
+    if (!isDirectVideoMedia) {
+      const urlHexMatch = clean.match(/\/([a-fA-F0-9]{40})(?:\.torrent|\/|\?|$)/i) || clean.match(/\b([a-fA-F0-9]{40})\b/);
+      if (urlHexMatch) {
+        return urlHexMatch[1].toLowerCase();
+      }
+    }
+    return '';
+  }
+
+  // 4. Standalone 40-character hex hash or 32-character base32 hash
   const hexMatch = clean.match(/\b([a-fA-F0-9]{40})\b/);
   if (hexMatch) return hexMatch[1].toLowerCase();
 
@@ -125,11 +137,7 @@ export function getHashFromSource(s: Partial<StreamSource>): string {
     const norm = normalizeInfoHash(s.magnet);
     if (norm) return norm;
   }
-  if (s.url && s.url.startsWith('magnet:')) {
-    const norm = normalizeInfoHash(s.url);
-    if (norm) return norm;
-  }
-  if ((s.type === 'torrent' || s.url?.toLowerCase().endsWith('.torrent')) && s.url) {
+  if (s.url) {
     const norm = normalizeInfoHash(s.url);
     if (norm) return norm;
   }
