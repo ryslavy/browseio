@@ -602,10 +602,10 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
           {/* Series Season/Episode Picker */}
           {type === 'series' && episodesList.length > 0 && (
-            <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.seasons')}</h3>
-                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', padding: '0.5rem 0.25rem' }}>
+            <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: '20px', marginBottom: '2rem', overflow: 'visible' }}>
+              <div style={{ marginBottom: '1.75rem' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '0.85rem', fontSize: '1.05rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.seasons')}</h3>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', padding: '0.5rem 0.5rem' }}>
                   {availableSeasons.map(s => {
                     const isSelected = selectedSeason === s;
                     return (
@@ -618,10 +618,10 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                         }}
                         className={`btn ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
                         style={{
-                          padding: '0.45rem 1.15rem',
+                          padding: '0.5rem 1.25rem',
                           borderRadius: '9999px',
-                          fontSize: '0.85rem',
-                          margin: '2px'
+                          fontSize: '0.9rem',
+                          boxShadow: isSelected ? '0 0 18px rgba(10, 132, 255, 0.65), 0 2px 8px rgba(0, 0, 0, 0.3)' : undefined
                         }}
                       >
                         {s === 0 ? t('details.specials') : `${t('details.season')} ${s}`}
@@ -632,8 +632,8 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
               </div>
 
               <div>
-                <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.episodes')}</h3>
-                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', maxHeight: '290px', overflowY: 'auto', padding: '0.6rem 0.4rem' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '0.85rem', fontSize: '1.05rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.episodes')}</h3>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', maxHeight: '320px', overflowY: 'auto', padding: '0.75rem 0.75rem' }}>
                   {availableEpisodes.map(e => {
                     const releaseDate = e.released ? new Date(e.released).toLocaleDateString() : '';
                     const isSelected = selectedEpisode === e.episode;
@@ -643,14 +643,14 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                         onClick={() => setSelectedEpisode(e.episode)}
                         className={`btn ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
                         style={{
-                          padding: '0.5rem 0.9rem',
+                          padding: '0.55rem 1rem',
                           borderRadius: '14px',
                           textAlign: 'left',
                           fontSize: '0.85rem',
                           display: 'flex',
                           flexDirection: 'column',
                           gap: '0.15rem',
-                          margin: '2px'
+                          boxShadow: isSelected ? '0 0 18px rgba(10, 132, 255, 0.65), 0 2px 8px rgba(0, 0, 0, 0.3)' : undefined
                         }}
                       >
                         <span>
