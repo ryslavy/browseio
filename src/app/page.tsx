@@ -332,38 +332,35 @@ function useCurrentView() {
       const hash = typeof window !== 'undefined' ? window.location.hash : '';
       const sp = new URLSearchParams(search);
 
-      // GitHub Pages 404 Redirect Handler (?p=movie/...)
-      const redirectPath = sp.get('p');
-      let effectivePath = path;
-      if (redirectPath) {
-        const decodedPath = redirectPath.replace(/~and~/g, '&');
-        effectivePath = '/' + decodedPath;
-
-        // Clean the ?p=... parameter from browser history so clicking <Link href="/"> works cleanly
-        sp.delete('p');
-        const cleanSearch = sp.toString();
-        const basePath = window.location.pathname.replace(/\/?$/, '');
-        const cleanUrl = (basePath || '') + (cleanSearch ? `?${cleanSearch}` : '') + hash;
-        window.history.replaceState(null, '', cleanUrl || '/');
-      }
-
-      if (effectivePath.includes('/settings') || hash.includes('settings') || sp.get('page') === 'settings') {
+      // 1. Settings View
+      if (path.includes('/settings') || hash.includes('settings') || sp.get('page') === 'settings') {
         setView({ type: 'settings' });
         return;
       }
 
-      const movieMatch = effectivePath.match(/\/movie\/([^/]+)\/([^/]+)/) || hash.match(/movie\/([^/]+)\/([^/]+)/);
-      if (movieMatch) {
-        setView({ type: 'movie', mediaType: movieMatch[1], id: movieMatch[2] });
-        return;
-      }
-
+      // 2. Direct Query Parameter View (?type=movie&id=550)
       const idParam = sp.get('id');
       if (idParam) {
         setView({ type: 'movie', mediaType: sp.get('type') || 'movie', id: idParam });
         return;
       }
 
+      // 3. GitHub Pages 404 Redirect Handler (?p=movie/...)
+      const redirectPath = sp.get('p');
+      let effectivePath = path;
+      if (redirectPath) {
+        const decodedPath = redirectPath.replace(/~and~/g, '&');
+        effectivePath = '/' + decodedPath;
+      }
+
+      // 4. Pathname / Hash Match (/movie/type/id)
+      const movieMatch = effectivePath.match(/\/movie\/([^/]+)\/([^/]+)/) || hash.match(/movie\/([^/]+)\/([^/]+)/);
+      if (movieMatch) {
+        setView({ type: 'movie', mediaType: movieMatch[1], id: movieMatch[2] });
+        return;
+      }
+
+      // 5. Default Catalog View
       setView({ type: 'catalog' });
     }
 

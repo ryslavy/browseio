@@ -18,7 +18,7 @@ export function MovieCard({ movie, defaultType = 'movie' }: MovieCardProps) {
   const altText = movie.name ? `${movie.name} (${year}) - Plakát` : 'Plakát titulu';
 
   return (
-    <Link href={`/movie/${mediaType}/${movie.id}`} style={{ display: 'block', textDecoration: 'none' }}>
+    <Link href={`/?type=${mediaType}&id=${movie.id}`} style={{ display: 'block', textDecoration: 'none' }}>
       <div
         className="glass-panel"
         style={{
