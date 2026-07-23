@@ -290,9 +290,8 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       return;
     }
 
-    const { infoHash, magnet } = source;
-    const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
-    const magnetUrl = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
+    const targetHash = normalizeInfoHash(source.infoHash || source.behaviorHints?.infoHash || source.magnet || source.url || '');
+    const magnetUrl = source.magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}&dn=${encodeURIComponent(source.title || 'Torrent')}` : null);
 
     if (!magnetUrl) {
       alert('Magnet odkaz není k dispozici.');

@@ -404,8 +404,11 @@ export async function fetchStreamsFromPlugin(
                   const sizeMatch = infoPart.match(/💾 ([0-9.]+ [A-Z]+)/);
                   if (sizeMatch) size = sizeMatch[1];
 
-                  const magnet = s.url && s.url.startsWith('magnet:') ? s.url : (s.magnet || undefined);
-                  const infoHash = normalizeInfoHash(s.infoHash || s.behaviorHints?.infoHash || magnet || (s.url && s.url.startsWith('magnet:') ? s.url : undefined));
+                  const urlStr = s.url || s.link || s.streamUrl || s.downloadUrl || s.file;
+                  const magnet = (urlStr && urlStr.startsWith('magnet:')) ? urlStr : (s.magnet || undefined);
+                  const rawHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash || magnet || urlStr;
+                  const infoHash = normalizeInfoHash(rawHash);
+                  const finalMagnet = magnet || (infoHash ? `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(namePart || 'Torrent')}` : undefined);
 
                   const cleanScraperName = scraper.name ? scraper.name.replace(/^[^\w\s\u00C0-\u024F]+/, '').trim() : plugin.name;
                   const rawSubName = s.name || cleanScraperName || plugin.name;
@@ -416,8 +419,8 @@ export async function fetchStreamsFromPlugin(
                     pluginName: plugin.name,
                     subProvider: rawSubName,
                     title: namePart,
-                    url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
-                    magnet: magnet,
+                    url: urlStr && !urlStr.startsWith('magnet:') ? urlStr : undefined,
+                    magnet: finalMagnet,
                     infoHash: infoHash || undefined,
                     size: size,
                     seeders: seeders,
@@ -482,8 +485,11 @@ export async function fetchStreamsFromPlugin(
       const sizeMatch = infoPart.match(/💾 ([0-9.]+ [A-Z]+)/);
       if (sizeMatch) size = sizeMatch[1];
 
-      const magnet = s.url && s.url.startsWith('magnet:') ? s.url : (s.magnet || undefined);
-      const infoHash = normalizeInfoHash(s.infoHash || s.behaviorHints?.infoHash || magnet || (s.url && s.url.startsWith('magnet:') ? s.url : undefined));
+      const urlStr = s.url || s.link || s.streamUrl;
+      const magnet = (urlStr && urlStr.startsWith('magnet:')) ? urlStr : (s.magnet || undefined);
+      const rawHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash || magnet || urlStr;
+      const infoHash = normalizeInfoHash(rawHash);
+      const finalMagnet = magnet || (infoHash ? `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(namePart || 'Torrent')}` : undefined);
 
       const subName = s.name ? String(s.name).split('\n')[0] : plugin.name;
 
@@ -493,8 +499,8 @@ export async function fetchStreamsFromPlugin(
         pluginName: plugin.name,
         subProvider: subName,
         title: namePart,
-        url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
-        magnet: magnet,
+        url: urlStr && !urlStr.startsWith('magnet:') ? urlStr : undefined,
+        magnet: finalMagnet,
         infoHash: infoHash || undefined,
         size: size,
         seeders: seeders,
