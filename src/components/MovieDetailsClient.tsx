@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
 import { getInstalledPlugins, fetchStreamsFromPlugin } from '@/lib/plugin-engine';
 import { checkTorBoxCached, resolveTorBoxStreamUrl, cacheTorBoxTorrent } from '@/lib/torbox';
+import { t, i18nEventTarget } from '@/lib/i18n';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), { ssr: false });
 
@@ -20,6 +22,9 @@ interface MediaSource {
   seeders?: number;
   seeds?: number;
   isTorBoxCached?: boolean;
+  headers?: Record<string, string>;
+  subtitles?: any[];
+  behaviorHints?: any;
 }
 
 interface MovieDetailsClientProps {
@@ -27,12 +32,29 @@ interface MovieDetailsClientProps {
   id?: string;
 }
 
+type QualityFilter = 'all' | '4k' | '1080p' | '720p' | 'sd';
+type AudioFilter = 'all' | 'cz' | 'en';
+type StreamSortMode = 'quality_desc' | 'seeders_desc' | 'size_desc' | 'size_asc' | 'name_asc';
+
 export default function MovieDetailsClient({ type: propType, id: propId }: MovieDetailsClientProps = {}) {
   const params = useParams();
   const router = useRouter();
 
   const [searchId, setSearchId] = useState<string>('');
   const [searchType, setSearchType] = useState<string>('');
+  const [, setLangTick] = useState(0);
+
+  useEffect(() => {
+    const handleLangChange = () => setLangTick(t => t + 1);
+    if (i18nEventTarget) {
+      i18nEventTarget.addEventListener('languageChange', handleLangChange);
+    }
+    return () => {
+      if (i18nEventTarget) {
+        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -49,10 +71,16 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
   const [sources, setSources] = useState<MediaSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchingStreams, setFetchingStreams] = useState(false);
-  const [sourceFilter, setSourceFilter] = useState('all');
   const [posterError, setPosterError] = useState(false);
   const [playingUrl, setPlayingUrl] = useState<string | null>(null);
   const [playingTitle, setPlayingTitle] = useState<string>('');
+
+  // Filters & Sorting state for Streams
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [qualityFilter, setQualityFilter] = useState<QualityFilter>('all');
+  const [audioFilter, setAudioFilter] = useState<AudioFilter>('all');
+  const [streamSort, setStreamSort] = useState<StreamSortMode>('quality_desc');
+  const [onlyDebrid, setOnlyDebrid] = useState(false);
 
   // For series
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
@@ -64,23 +92,21 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       setLoading(true);
       const metaData = await getMetaDetails(type as string, id as string);
       setMeta(metaData);
-      
-      if (type === 'series' && metaData?.videos && metaData.videos.length > 0) {
-        const validVideos = metaData.videos.filter(v => v.season > 0);
-        setEpisodesList(validVideos);
-        
-        const s1Eps = validVideos.filter(v => v.season === 1).sort((a, b) => a.episode - b.episode);
-        if (s1Eps.length > 0) {
-          setSelectedSeason(1);
-          setSelectedEpisode(s1Eps[0].episode);
-        } else if (validVideos.length > 0) {
-          setSelectedSeason(validVideos[0].season);
-          setSelectedEpisode(validVideos[0].episode);
-        }
-      }
       setLoading(false);
+
+      if (type === 'series' && metaData?.videos && metaData.videos.length > 0) {
+        setEpisodesList(metaData.videos);
+        const seasons = Array.from(new Set(metaData.videos.map(v => v.season))).sort((a, b) => a - b);
+        const firstSeason = seasons.includes(1) ? 1 : seasons[0] || 1;
+        setSelectedSeason(firstSeason);
+        const firstEp = metaData.videos.find(v => v.season === firstSeason);
+        if (firstEp) setSelectedEpisode(firstEp.episode);
+      }
     }
-    loadMeta();
+
+    if (id) {
+      loadMeta();
+    }
   }, [type, id]);
 
   const activeFetchIdRef = useRef(0);
@@ -89,7 +115,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     setFetchingStreams(true);
     setSources([]);
 
-    const torboxApiKey = localStorage.getItem('torbox_api_key');
+    const torboxApiKey = typeof window !== 'undefined' ? localStorage.getItem('torbox_api_key') : null;
     const activePlugins = getInstalledPlugins().filter(p => p.enabled);
 
     if (activePlugins.length === 0) {
@@ -150,7 +176,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       }
     });
 
-  }, [type, id, selectedSeason, selectedEpisode]);
+  }, [type, id, selectedSeason, selectedEpisode, meta]);
 
   useEffect(() => {
     if (!meta) return;
@@ -168,7 +194,6 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     const torboxApiKey = localStorage.getItem('torbox_api_key');
     const { infoHash, magnet, url, isTorBoxCached } = source;
     const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
-    const seeders = source.seeders || source.seeds || 0;
     const sourceName = source.name || 'P2P Stream';
 
     const displayTitle = meta?.name ? `${meta.name}${meta.releaseInfo ? ` (${meta.releaseInfo})` : ''}` : sourceName;
@@ -178,7 +203,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         window.location.href = `potplayer://${streamUrl}`;
       } catch (e) {
         console.error('Error launching PotPlayer:', e);
-        alert('Chyba při spouštění PotPlayeru. Nezapomeňte si stáhnout a nainstalovat .reg soubor!');
+        alert('Chyba při spouštění PotPlayeru. Ujistěte se, že máte nainstalovaný PotPlayer.');
       }
     };
 
@@ -187,7 +212,8 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         const targetMagnet = magnet || `magnet:?xt=urn:btih:${targetHash}`;
         const streamUrl = await resolveTorBoxStreamUrl(targetMagnet, torboxApiKey, selectedSeason, selectedEpisode);
         if (streamUrl && streamUrl.startsWith('http')) {
-          await playInPotPlayer(streamUrl);
+          setPlayingUrl(streamUrl);
+          setPlayingTitle(displayTitle);
           return;
         }
       } catch (e) {
@@ -204,11 +230,6 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         setPlayingUrl(url);
         setPlayingTitle(displayTitle);
       }
-      return;
-    }
-    
-    if (mode === 'potplayer' && (magnet || targetHash)) {
-      alert('Tento torrent není v Debrid cache. K přehrání v PotPlayeru potřebuješ přímý HTTP link z Debridu nebo scraperu.');
       return;
     }
   };
@@ -255,102 +276,28 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
   };
 
   const [copiedMagnetIdx, setCopiedMagnetIdx] = useState<number | null>(null);
-  const [cachingIdx, setCachingIdx] = useState<number | null>(null);
-  const [cachedSuccessIdx, setCachedSuccessIdx] = useState<number | null>(null);
 
   const handleCopyMagnet = async (source: MediaSource, idx: number) => {
-    const { infoHash, magnet } = source;
+    const { infoHash, magnet, url } = source;
     const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
-    const magnetUrl = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
+    const linkToCopy = url || magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
 
-    if (magnetUrl) {
+    if (linkToCopy) {
       try {
-        await navigator.clipboard.writeText(magnetUrl);
+        await navigator.clipboard.writeText(linkToCopy);
         setCopiedMagnetIdx(idx);
         setTimeout(() => setCopiedMagnetIdx(null), 2000);
       } catch (e) {
-        console.error('Failed to copy magnet:', e);
-        alert('Nepodařilo se zkopírovat magnet odkaz.');
+        console.error('Failed to copy link:', e);
       }
-    } else {
-      alert('Magnet odkaz není k dispozici.');
     }
   };
 
-  const handleCacheTorBox = async (source: MediaSource, idx: number) => {
-    const torboxApiKey = localStorage.getItem('torbox_api_key');
-    if (!torboxApiKey) {
-      alert('Chybí TorBox API klíč. Přidejte si jej v Nastavení v pravém horním rohu.');
-      return;
-    }
-
-    const { infoHash, magnet } = source;
-    const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
-    const magnetUrl = magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
-
-    if (!magnetUrl) {
-      alert('Magnet odkaz není k dispozici.');
-      return;
-    }
-
-    setCachingIdx(idx);
-    try {
-      const res = await cacheTorBoxTorrent(magnetUrl, torboxApiKey);
-      if (res.success) {
-        setCachedSuccessIdx(idx);
-        setTimeout(() => setCachedSuccessIdx(null), 4000);
-      } else {
-        alert(res.message || 'Nepodařilo se přidat torrent do TorBoxu.');
-      }
-    } catch (e) {
-      console.error('TorBox cache request failed:', e);
-      alert('Chyba při komunikaci s TorBox API.');
-    } finally {
-      setCachingIdx(null);
-    }
-  };
-
-  const [playerIdle, setPlayerIdle] = useState(false);
-  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const resetIdleTimer = useCallback(() => {
-    setPlayerIdle(false);
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setPlayerIdle(true), 2500);
-  }, []);
-
-  useEffect(() => {
-    if (playingUrl) {
-      resetIdleTimer();
-    } else {
-      setPlayerIdle(false);
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    }
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    };
-  }, [playingUrl, resetIdleTimer]);
-
-  const videoOptions = useMemo(() => {
-    return {
-      autoplay: true,
-      controls: true,
-      responsive: true,
-      fill: true,
-      playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
-      sources: playingUrl ? [
-        {
-          src: playingUrl,
-          type: playingUrl.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4'
-        }
-      ] : []
-    };
-  }, [playingUrl]);
-
+  // Provider list derived from plugins and stream sources
   const availableProviders = useMemo(() => {
     const plugins = getInstalledPlugins().filter(p => p.enabled);
     const providersMap = new Map<string, string>();
-    providersMap.set('all', 'Všechny');
+    providersMap.set('all', t('streams.quick_all'));
     
     plugins.forEach(p => {
       providersMap.set(p.name, p.name);
@@ -363,7 +310,6 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         else if (/sktorrent/i.test(s.name)) cleanName = 'SkTorrent';
         else if (/sktonline/i.test(s.name)) cleanName = 'SkTonline';
         else if (/torrentio/i.test(s.name)) cleanName = 'Torrentio';
-        else if (s.name.length > 20) cleanName = s.name.slice(0, 18) + '...';
 
         providersMap.set(cleanName, cleanName);
       }
@@ -376,83 +322,172 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     return result;
   }, [sources]);
 
-  const getFilteredSources = () => {
-    if (sourceFilter === 'all') return sources;
-    return sources.filter(s => {
-       if (sourceFilter === 'TorBox' && s.isTorBoxCached) return true;
-       if (s.name && s.name.toLowerCase().includes(sourceFilter.toLowerCase())) return true;
-       if (s.name && sourceFilter.toLowerCase().includes(s.name.toLowerCase())) return true;
-       if (sourceFilter === 'HellSpy' && /hellspy/i.test(s.name || '')) return true;
-       if (sourceFilter === 'SkTorrent' && /sktorrent/i.test(s.name || '')) return true;
-       if (sourceFilter === 'SkTonline' && /sktonline/i.test(s.name || '')) return true;
-       if (sourceFilter === 'Torrentio' && /torrentio/i.test(s.name || '')) return true;
-       return false;
-    });
+  // Helper functions for quality and audio detection
+  const detectQuality = (s: MediaSource): '4k' | '1080p' | '720p' | 'sd' => {
+    const text = `${s.name || ''} ${s.title || ''}`.toLowerCase();
+    if (/4k|2160p|uhd|remux\.2160/i.test(text)) return '4k';
+    if (/1080p|fullhd|fhd/i.test(text)) return '1080p';
+    if (/720p|hdrip/i.test(text)) return '720p';
+    return 'sd';
   };
 
+  const detectAudio = (s: MediaSource): 'cz' | 'en' => {
+    const text = `${s.name || ''} ${s.title || ''}`.toLowerCase();
+    if (/cz|sk|czdab|skdab|dubbing|dabing|🔊/i.test(text)) return 'cz';
+    return 'en';
+  };
+
+  const parseSizeBytes = (sizeStr?: string): number => {
+    if (!sizeStr || sizeStr === 'Unknown') return 0;
+    const match = sizeStr.match(/([0-9.]+)\s*(GB|MB|KB|B)/i);
+    if (!match) return 0;
+    const val = parseFloat(match[1]);
+    const unit = match[2].toUpperCase();
+    if (unit === 'GB') return val * 1024 * 1024 * 1024;
+    if (unit === 'MB') return val * 1024 * 1024;
+    if (unit === 'KB') return val * 1024;
+    return val;
+  };
+
+  // Filtered & Sorted sources
+  const processedSources = useMemo(() => {
+    let result = [...sources];
+
+    // 1. Provider Filter
+    if (sourceFilter !== 'all') {
+      result = result.filter(s => {
+        if (s.name && s.name.toLowerCase().includes(sourceFilter.toLowerCase())) return true;
+        if (s.name && sourceFilter.toLowerCase().includes(s.name.toLowerCase())) return true;
+        if (sourceFilter === 'HellSpy' && /hellspy/i.test(s.name || '')) return true;
+        if (sourceFilter === 'SkTorrent' && /sktorrent/i.test(s.name || '')) return true;
+        if (sourceFilter === 'SkTonline' && /sktonline/i.test(s.name || '')) return true;
+        if (sourceFilter === 'Torrentio' && /torrentio/i.test(s.name || '')) return true;
+        return false;
+      });
+    }
+
+    // 2. Quality Filter
+    if (qualityFilter !== 'all') {
+      result = result.filter(s => detectQuality(s) === qualityFilter);
+    }
+
+    // 3. Audio Filter
+    if (audioFilter !== 'all') {
+      result = result.filter(s => detectAudio(s) === audioFilter);
+    }
+
+    // 4. Quick Only Debrid
+    if (onlyDebrid) {
+      result = result.filter(s => Boolean(s.isTorBoxCached));
+    }
+
+    // 5. Sort
+    result.sort((a, b) => {
+      if (streamSort === 'quality_desc') {
+        const qOrder = { '4k': 4, '1080p': 3, '720p': 2, 'sd': 1 };
+        const qA = qOrder[detectQuality(a)];
+        const qB = qOrder[detectQuality(b)];
+        if (qA !== qB) return qB - qA;
+      }
+      if (streamSort === 'seeders_desc') {
+        const sA = a.seeders || a.seeds || 0;
+        const sB = b.seeders || b.seeds || 0;
+        if (sA !== sB) return sB - sA;
+      }
+      if (streamSort === 'size_desc') {
+        const szA = parseSizeBytes(a.size);
+        const szB = parseSizeBytes(b.size);
+        if (szA !== szB) return szB - szA;
+      }
+      if (streamSort === 'size_asc') {
+        const szA = parseSizeBytes(a.size);
+        const szB = parseSizeBytes(b.size);
+        if (szA !== szB) return szA - szB;
+      }
+      if (streamSort === 'name_asc') {
+        return (a.title || '').localeCompare(b.title || '');
+      }
+      return 0;
+    });
+
+    return result;
+  }, [sources, sourceFilter, qualityFilter, audioFilter, onlyDebrid, streamSort]);
+
   if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><div className="spinner"></div></div>;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem' }}>
+        <div className="spinner"></div>
+      </div>
+    );
   }
 
   if (!meta) {
-    return <div style={{ textAlign: 'center', padding: '4rem' }}>Film nebyl nalezen.</div>;
+    return (
+      <div style={{ textAlign: 'center', padding: '4rem' }}>
+        <h2>{t('details.not_found')}</h2>
+        <Link href="/" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
+          {t('details.back')}
+        </Link>
+      </div>
+    );
   }
 
-  const filteredSources = getFilteredSources();
   const availableSeasons = Array.from(new Set(episodesList.map(e => e.season))).sort((a, b) => a - b);
   const availableEpisodes = episodesList.filter(e => e.season === selectedSeason).sort((a, b) => a.episode - b.episode);
+  const activePlugins = getInstalledPlugins().filter(p => p.enabled);
 
   return (
     <div className="fade-in">
+      <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', textDecoration: 'none', fontWeight: 500 }}>
+        {t('details.back')}
+      </Link>
+
       <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '3rem' }}>
-        <div style={{ flex: '0 0 300px' }}>
+        <div style={{ flex: '0 0 280px' }}>
           {meta.poster && !posterError ? (
             <img
               src={meta.poster}
               alt={meta.name ? `${meta.name} - Plakát` : 'Plakát titulu'}
-              style={{ width: '100%', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}
+              style={{ width: '100%', borderRadius: '14px', boxShadow: '0 12px 36px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}
               loading="eager"
               decoding="async"
               onError={() => setPosterError(true)}
             />
           ) : (
-            <div style={{ width: '100%', aspectRatio: '2/3', backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-              Bez obrázku
+            <div style={{ width: '100%', aspectRatio: '2/3', backgroundColor: 'var(--bg-secondary)', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+              {t('catalog.no_image')}
             </div>
           )}
         </div>
         
         <div style={{ flex: '1 1 400px' }}>
-          <h1 style={{ fontSize: '2.5rem', marginBottom: meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle ? '0.2rem' : '0.5rem', lineHeight: 1.15 }}>
+          <h1 style={{ fontSize: '2.5rem', marginBottom: meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle ? '0.2rem' : '0.5rem', lineHeight: 1.15, fontWeight: 800 }}>
             {meta.czTitle || meta.name}
           </h1>
           {meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle && (
-            <div style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '1rem', fontWeight: 400 }}>
+            <div style={{ fontSize: '1.15rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '1rem', fontWeight: 400 }}>
               ({meta.originalTitle})
             </div>
           )}
-          {(!meta.czTitle && meta.name && meta.originalTitle && meta.name !== meta.originalTitle) && (
-            <div style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '1rem', fontWeight: 400 }}>
-              ({meta.originalTitle})
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+          
+          <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.9rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <span>{meta.releaseInfo}</span>
             {(meta as any).released && (
-              <span title="Přesné datum vydání">📅 {new Date((meta as any).released).toLocaleDateString('cs-CZ')}</span>
+              <span title={t('details.released')}>📅 {new Date((meta as any).released).toLocaleDateString()}</span>
             )}
             <span>⭐ {meta.imdbRating || 'N/A'}</span>
-            {meta.genres && <span>{meta.genres.join(' • ')}</span>}
+            {meta.genres && <span>{meta.genres.map(g => t(`genre.${g}`) || g).join(' • ')}</span>}
           </div>
           
-          <p style={{ fontSize: '1.1rem', lineHeight: 1.8, marginBottom: '2rem' }}>
-            {meta.description || 'Popis není k dispozici.'}
+          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, marginBottom: '2rem', color: 'var(--text-primary)' }}>
+            {meta.description || t('details.no_description')}
           </p>
 
+          {/* Series Season/Episode Picker */}
           {type === 'series' && episodesList.length > 0 && (
-            <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem' }}>
+            <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem' }}>
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1.1rem', color: 'var(--text-secondary)' }}>Série</h3>
+                <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.seasons')}</h3>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {availableSeasons.map(s => (
                     <button
@@ -462,46 +497,44 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                         const eps = episodesList.filter(ep => ep.season === s).sort((a, b) => a.episode - b.episode);
                         if (eps.length > 0) setSelectedEpisode(eps[0].episode);
                       }}
-                      className={`glass-pill ${selectedSeason === s ? 'active' : ''}`}
+                      className={`btn ${selectedSeason === s ? 'btn-primary' : 'btn-secondary'}`}
                       style={{
-                        padding: '0.6rem 1.2rem',
+                        padding: '0.4rem 1rem',
                         borderRadius: '9999px',
-                        cursor: 'pointer',
-                        fontWeight: selectedSeason === s ? 600 : 500,
+                        fontSize: '0.85rem'
                       }}
                     >
-                      {s === 0 ? 'Speciály' : `Série ${s}`}
+                      {s === 0 ? t('details.specials') : `${t('details.season')} ${s}`}
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1.1rem', color: 'var(--text-secondary)' }}>Epizody</h3>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', maxHeight: '320px', overflowY: 'auto', padding: '0.5rem', margin: '-0.5rem' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t('details.episodes')}</h3>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', maxHeight: '280px', overflowY: 'auto', padding: '0.25rem' }}>
                   {availableEpisodes.map(e => {
-                    const releaseDate = e.released ? new Date(e.released).toLocaleDateString('cs-CZ') : '';
+                    const releaseDate = e.released ? new Date(e.released).toLocaleDateString() : '';
                     return (
                       <button
                         key={e.episode}
                         onClick={() => setSelectedEpisode(e.episode)}
-                        className={`glass-pill ${selectedEpisode === e.episode ? 'active' : ''}`}
+                        className={`btn ${selectedEpisode === e.episode ? 'btn-primary' : 'btn-secondary'}`}
                         style={{
-                          padding: '0.6rem 1rem',
-                          borderRadius: '16px',
-                          cursor: 'pointer',
+                          padding: '0.5rem 0.9rem',
+                          borderRadius: '12px',
                           textAlign: 'left',
-                          minWidth: '140px',
+                          fontSize: '0.85rem',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '0.2rem',
+                          gap: '0.1rem'
                         }}
                       >
-                        <span style={{ fontWeight: selectedEpisode === e.episode ? 600 : 500 }}>
-                          E{e.episode} {e.title && e.title.length < 25 ? `- ${e.title}` : ''}
+                        <span>
+                          E{e.episode} {e.title && e.title.length < 22 ? `- ${e.title}` : ''}
                         </span>
                         {releaseDate && (
-                          <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                          <span style={{ fontSize: '0.7rem', opacity: 0.75 }}>
                             📅 {releaseDate}
                           </span>
                         )}
@@ -515,202 +548,292 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         </div>
       </div>
 
-      <div style={{ marginTop: '2rem' }}>
+      {/* STREAMS SECTION */}
+      <div style={{ marginTop: '2.5rem' }}>
+        {/* Header Title */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--accent-color)' }}>Dostupné</span> streamy ({filteredSources.length})
+          <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', fontSize: '1.75rem', fontWeight: 800 }}>
+            <span>{t('streams.title')}</span>
+            <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '0.2rem 0.7rem', borderRadius: '9999px', fontSize: '0.9rem', fontWeight: 700 }}>
+              {processedSources.length}
+            </span>
             {fetchingStreams && (
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(255,255,255,0.05)', padding: '0.3rem 0.75rem', borderRadius: '12px' }}>
                 <div className="spinner" style={{ width: '13px', height: '13px', borderWidth: '2px' }}></div>
-                Hledám další zdroje...
+                {t('streams.searching_more')}
               </span>
             )}
           </h2>
+
+          {/* Stream Sorting Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('streams.sort_label')}</span>
+            <select
+              value={streamSort}
+              onChange={(e) => setStreamSort(e.target.value as StreamSortMode)}
+              className="input"
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', borderRadius: '8px', width: 'auto', cursor: 'pointer' }}
+            >
+              <option value="quality_desc" style={{ backgroundColor: '#1a1d24' }}>{t('streams.sort_quality')}</option>
+              <option value="seeders_desc" style={{ backgroundColor: '#1a1d24' }}>{t('streams.sort_seeders')}</option>
+              <option value="size_desc" style={{ backgroundColor: '#1a1d24' }}>{t('streams.sort_size_desc')}</option>
+              <option value="size_asc" style={{ backgroundColor: '#1a1d24' }}>{t('streams.sort_size_asc')}</option>
+              <option value="name_asc" style={{ backgroundColor: '#1a1d24' }}>{t('streams.sort_name')}</option>
+            </select>
+          </div>
+        </div>
+
+        {/* CONTROLS BAR: Provider Tabs, Quality Tabs, Audio Tabs */}
+        <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '16px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* 1. Sub-provider tabs */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>Zdroj:</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '70px' }}>{t('streams.filter_source')}</span>
             {availableProviders.map(src => (
               <button
                 key={src.id}
                 onClick={() => setSourceFilter(src.id)}
-                className={`glass-pill ${sourceFilter === src.id ? 'active' : ''}`}
-                style={{
-                  padding: '0.5rem 1rem',
-                  fontSize: '0.85rem',
-                  borderRadius: '9999px',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}
+                className={`btn ${sourceFilter === src.id ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '0.35rem 0.85rem', fontSize: '0.825rem', borderRadius: '9999px' }}
               >
                 {src.label}
               </button>
             ))}
           </div>
+
+          {/* 2. Quality Tabs */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '70px' }}>{t('streams.filter_quality')}</span>
+            {[
+              { id: 'all', label: t('streams.quality_all') },
+              { id: '4k', label: t('streams.quality_4k') },
+              { id: '1080p', label: t('streams.quality_1080p') },
+              { id: '720p', label: t('streams.quality_720p') },
+              { id: 'sd', label: t('streams.quality_sd') },
+            ].map(q => (
+              <button
+                key={q.id}
+                onClick={() => setQualityFilter(q.id as QualityFilter)}
+                className={`btn ${qualityFilter === q.id ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '0.35rem 0.85rem', fontSize: '0.825rem', borderRadius: '9999px' }}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 3. Audio & Quick Filter Toggles */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '70px' }}>{t('streams.filter_audio')}</span>
+            {[
+              { id: 'all', label: t('streams.audio_all') },
+              { id: 'cz', label: t('streams.audio_cz') },
+              { id: 'en', label: t('streams.audio_en') },
+            ].map(a => (
+              <button
+                key={a.id}
+                onClick={() => setAudioFilter(a.id as AudioFilter)}
+                className={`btn ${audioFilter === a.id ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '0.35rem 0.85rem', fontSize: '0.825rem', borderRadius: '9999px' }}
+              >
+                {a.label}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setOnlyDebrid(prev => !prev)}
+              className={`btn ${onlyDebrid ? 'btn-primary' : 'btn-secondary'}`}
+              style={{
+                padding: '0.35rem 0.85rem',
+                fontSize: '0.825rem',
+                borderRadius: '9999px',
+                backgroundColor: onlyDebrid ? 'rgba(234, 179, 8, 0.3)' : undefined,
+                color: onlyDebrid ? '#eab308' : undefined,
+                border: onlyDebrid ? '1px solid #eab308' : undefined,
+                marginLeft: 'auto'
+              }}
+            >
+              {t('streams.quick_debrid')}
+            </button>
+          </div>
         </div>
         
+        {/* STREAM CARDS LIST */}
         {fetchingStreams && sources.length === 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><div className="spinner"></div></div>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+            <div className="spinner"></div>
+          </div>
+        ) : activePlugins.length === 0 ? (
+          <div className="glass-panel" style={{ padding: '2.5rem', textAlign: 'center', borderRadius: '16px' }}>
+            <p style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+              {t('streams.no_plugins_notice')}
+            </p>
+            <Link href="/settings" className="btn btn-primary">
+              {t('streams.manage_plugins')}
+            </Link>
+          </div>
+        ) : processedSources.length === 0 ? (
+          <div className="glass-panel" style={{ padding: '2.5rem', textAlign: 'center', borderRadius: '16px' }}>
+            <p style={{ fontSize: '1.05rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              {t('streams.no_streams')}
+            </p>
+            <button 
+              onClick={() => { setSourceFilter('all'); setQualityFilter('all'); setAudioFilter('all'); setOnlyDebrid(false); }} 
+              className="btn btn-secondary"
+            >
+              Obnovit všechny filtry
+            </button>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {filteredSources.length > 0 ? filteredSources.map((source, idx) => (
-              <div key={idx} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', border: source.isTorBoxCached ? '1px solid rgba(234, 179, 8, 0.4)' : undefined }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                    <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
-                      {source.name}
-                    </span>
-                    {source.isTorBoxCached && (
-                      <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.2)', color: '#eab308', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 700 }}>
-                        ⚡ TorBox Instant (Debrid)
+            {processedSources.map((source, idx) => {
+              const quality = detectQuality(source);
+              const audio = detectAudio(source);
+
+              return (
+                <div 
+                  key={idx} 
+                  className="glass-panel" 
+                  style={{ 
+                    padding: '1.25rem 1.5rem', 
+                    borderRadius: '16px',
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    gap: '1.25rem', 
+                    flexWrap: 'wrap', 
+                    border: source.isTorBoxCached ? '1px solid rgba(234, 179, 8, 0.5)' : '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: source.isTorBoxCached ? '0 0 20px rgba(234, 179, 8, 0.15)' : undefined
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: '280px' }}>
+                    {/* BADGES HEADER */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+                      {/* Provider Badge */}
+                      <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                        {source.name || 'Doplněk'}
                       </span>
-                    )}
-                    {typeof source.seeders === 'number' && source.seeders > 0 && (
-                      <span style={{ color: 'var(--success-color)', fontSize: '0.9rem', fontWeight: 500 }}>
-                        👤 {source.seeders} seeders
-                      </span>
-                    )}
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                      💾 {source.size}
-                    </span>
+
+                      {/* Quality Badge */}
+                      {quality === '4k' && (
+                        <span style={{ background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.25), rgba(168, 85, 247, 0.25))', color: '#fbbf24', border: '1px solid rgba(251, 191, 36, 0.4)', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+                          ☀️ 4K UHD
+                        </span>
+                      )}
+                      {quality === '1080p' && (
+                        <span style={{ backgroundColor: 'rgba(14, 165, 233, 0.2)', color: '#38bdf8', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                          📺 1080p HD
+                        </span>
+                      )}
+                      {quality === '720p' && (
+                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
+                          📺 720p HD
+                        </span>
+                      )}
+
+                      {/* Audio Badge */}
+                      {audio === 'cz' && (
+                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.25)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                          🔊 CZ / SK Dabing
+                        </span>
+                      )}
+
+                      {/* Debrid Badge */}
+                      {source.isTorBoxCached && (
+                        <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.25)', color: '#facc15', border: '1px solid rgba(250, 204, 21, 0.5)', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+                          ⚡ TorBox Instant
+                        </span>
+                      )}
+
+                      {/* Seeders & Size */}
+                      {typeof source.seeders === 'number' && source.seeders > 0 && (
+                        <span style={{ color: '#34d399', fontSize: '0.85rem', fontWeight: 600 }}>
+                          👤 {source.seeders} {t('streams.seeders')}
+                        </span>
+                      )}
+                      {source.size && source.size !== 'Unknown' && (
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                          💾 {source.size}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* STREAM TITLE */}
+                    <h4 style={{ margin: 0, fontSize: '0.975rem', fontWeight: 600, color: '#fff', lineHeight: 1.4, wordBreak: 'break-word' }}>
+                      {source.title}
+                    </h4>
                   </div>
-                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 500, whiteSpace: 'pre-line' }}>{source.title}</h4>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {source.isTorBoxCached && (
-                    <>
-                      <button onClick={() => handlePlay(source, 'debrid')} className="btn btn-primary" style={{ backgroundColor: '#eab308', color: '#000', fontWeight: 600 }}>
-                        🟣 Přehrát v PotPlayeru (Debrid)
-                      </button>
-                      <button onClick={() => handleDownload(source)} className="btn btn-secondary" style={{ border: '1px solid rgba(234, 179, 8, 0.4)', color: '#eab308' }}>
-                        ⬇️ Stáhnout (Debrid)
-                      </button>
-                    </>
-                  )}
-                  {(!source.magnet && !source.infoHash) && (
-                    <>
-                      <button onClick={() => handlePlay(source, 'direct')} className="btn btn-primary">
-                        ▶ Web Player
-                      </button>
-                      <button onClick={() => handlePlay(source, 'potplayer')} className="btn btn-secondary">
-                        🟣 PotPlayer
-                      </button>
-                      <button onClick={() => handleDownload(source)} className="btn btn-secondary">
-                        ⬇️ Stáhnout
-                      </button>
-                    </>
-                  )}
-                  {(source.magnet || source.infoHash) && !source.isTorBoxCached && (
-                    <>
+
+                  {/* ACTIONS BUTTONS */}
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {source.isTorBoxCached ? (
                       <button 
-                        onClick={() => handleCacheTorBox(source, idx)} 
-                        disabled={cachingIdx === idx}
-                        className="btn btn-secondary" 
-                        style={{ border: '1px solid rgba(234, 179, 8, 0.5)', color: '#eab308', opacity: cachingIdx === idx ? 0.7 : 1 }}
-                        title="Odeslat torrent do TorBox cloudu k okamžitému stažení / cache"
+                        onClick={() => handlePlay(source, 'debrid')} 
+                        className="btn btn-primary" 
+                        style={{ backgroundColor: '#facc15', color: '#000', fontWeight: 700, padding: '0.5rem 1.1rem', fontSize: '0.9rem' }}
                       >
-                        {cachingIdx === idx ? '⏳ Ukládám...' : cachedSuccessIdx === idx ? '✅ Přidáno do TorBoxu!' : '⚡ Nacacheovat do TorBoxu'}
+                        ⚡ Instant Play
                       </button>
-                      <button onClick={() => handleDownload(source)} className="btn btn-secondary">
-                        📥 Stáhnout (Magnet)
+                    ) : source.url && !source.url.startsWith('magnet') ? (
+                      <button 
+                        onClick={() => handlePlay(source, 'direct')} 
+                        className="btn btn-primary"
+                        style={{ padding: '0.5rem 1.1rem', fontSize: '0.9rem', fontWeight: 700 }}
+                      >
+                        {t('streams.play_web')}
                       </button>
-                      <button onClick={() => handleCopyMagnet(source, idx)} className="btn btn-secondary" title="Zkopírovat magnet odkaz do schránky">
-                        {copiedMagnetIdx === idx ? '✅ Zkopírováno!' : '📋 Zkopírovat magnet'}
+                    ) : null}
+
+                    {source.url && !source.url.startsWith('magnet') && (
+                      <button 
+                        onClick={() => handlePlay(source, 'potplayer')} 
+                        className="btn btn-secondary" 
+                        style={{ fontSize: '0.85rem', padding: '0.5rem 0.85rem' }}
+                      >
+                        {t('streams.potplayer')}
                       </button>
-                    </>
-                  )}
+                    )}
+
+                    <button 
+                      onClick={() => handleDownload(source)} 
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.85rem', padding: '0.5rem 0.85rem' }}
+                    >
+                      {t('streams.download')}
+                    </button>
+
+                    <button 
+                      onClick={() => handleCopyMagnet(source, idx)} 
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.85rem', padding: '0.5rem 0.85rem' }}
+                    >
+                      {copiedMagnetIdx === idx ? t('streams.link_copied') : t('streams.copy_link')}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )) : (
-              <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: 'var(--bg-secondary)', borderRadius: '12px' }}>
-                Nebyly nalezeny žádné streamy.
-              </div>
-            )}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {playingUrl && typeof document !== 'undefined' && createPortal(
-        <div 
-          className="fade-in" 
-          onMouseMove={resetIdleTimer}
-          onClick={resetIdleTimer}
-          style={{ 
-            position: 'fixed', 
-            top: 0, 
-            left: 0, 
-            width: '100vw', 
-            height: '100vh', 
-            backgroundColor: '#000', 
-            zIndex: 999999,
-            display: 'flex',
-            flexDirection: 'column'
-          }}
-        >
-          <div style={{ 
-            position: 'absolute', 
-            top: '15px', 
-            left: '15px', 
-            zIndex: 100, 
-            pointerEvents: playerIdle ? 'none' : 'auto',
-            opacity: playerIdle ? 0 : 1,
-            transition: 'opacity 0.4s ease'
-          }}>
+      {/* VIDEO PLAYER MODAL */}
+      {playingUrl && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '1.5rem', backdropFilter: 'blur(10px)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2rem', fontWeight: 700 }}>{playingTitle}</h3>
             <button 
-              onClick={() => { setPlayingUrl(null); setPlayingTitle(''); }}
-              className="glass-pill" 
-              style={{ 
-                backgroundColor: 'rgba(25, 25, 30, 0.45)', 
-                backdropFilter: 'blur(24px) saturate(200%)', 
-                border: '1px solid rgba(255,255,255,0.15)', 
-                borderTop: '1px solid rgba(255,255,255,0.3)',
-                color: '#fff',
-                fontSize: '1rem',
-                fontWeight: 600,
-                padding: '0.6rem 1.4rem',
-                borderRadius: '9999px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                cursor: 'pointer',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
-              }}
+              onClick={() => setPlayingUrl(null)} 
+              className="btn btn-secondary"
+              style={{ fontSize: '1rem', padding: '0.4rem 1rem', borderRadius: '8px' }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-              </svg>
-              Zpět
+              ✕ Zavřít přehrávač
             </button>
           </div>
-
-          <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ width: '100%', height: '100%', backgroundColor: '#000', position: 'relative' }}>
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                padding: '1.5rem 1rem',
-                background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%)',
-                zIndex: 50,
-                pointerEvents: 'none',
-                display: 'flex',
-                justifyContent: 'center',
-                opacity: playerIdle ? 0 : 1,
-                transition: 'opacity 0.4s ease'
-              }}>
-                <h1 style={{ margin: 0, color: '#fff', fontSize: '1.4rem', fontWeight: 500, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-                  {playingTitle}
-                </h1>
-              </div>
-
-              <div style={{ width: '100%', height: '100%' }}>
-                <VideoPlayer options={videoOptions} />
-              </div>
-            </div>
+          <div style={{ flex: 1, position: 'relative', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
+            <VideoPlayer options={{ autoplay: true, controls: true, responsive: true, fill: true, sources: [{ src: playingUrl, type: playingUrl.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4' }] }} />
           </div>
-        </div>,
-        document.body
+        </div>
       )}
-
     </div>
   );
 }

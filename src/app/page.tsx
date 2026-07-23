@@ -8,6 +8,9 @@ import { CatalogHeader } from '@/components/catalog/CatalogHeader';
 import { FilterBar } from '@/components/catalog/FilterBar';
 import { SortDropdown } from '@/components/catalog/SortDropdown';
 import { MovieGrid } from '@/components/catalog/MovieGrid';
+import { t, i18nEventTarget } from '@/lib/i18n';
+import MovieDetailsClient from '@/components/MovieDetailsClient';
+import SettingsPage from '@/app/settings/page';
 
 const MOVIE_GENRES = [
   'top',
@@ -60,6 +63,20 @@ function CatalogContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  const [, setLangTick] = useState(0);
+
+  useEffect(() => {
+    const handleLangChange = () => setLangTick(t => t + 1);
+    if (i18nEventTarget) {
+      i18nEventTarget.addEventListener('languageChange', handleLangChange);
+    }
+    return () => {
+      if (i18nEventTarget) {
+        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
+      }
+    };
+  }, []);
 
   // URL State derivation
   const typeParam = (searchParams.get('type') === 'series' ? 'series' : 'movie') as 'movie' | 'series';
@@ -233,7 +250,7 @@ function CatalogContent() {
 
   // UI Change Handlers
   const handleTypeChange = (newType: 'movie' | 'series') => {
-    updateUrlParams({ type: newType, genre: undefined }); // Persist 'q' (search query)
+    updateUrlParams({ type: newType, genre: undefined });
   };
 
   const handleGenreChange = (newGenre: string) => {
@@ -247,6 +264,10 @@ function CatalogContent() {
   const handleSearchSubmit = (newQuery: string) => {
     updateUrlParams({ q: newQuery });
   };
+
+  const headerTitle = qParam
+    ? (loading ? `${t('catalog.searching')} "${qParam}"...` : `${t('catalog.search_results')} "${qParam}"`)
+    : `${genreParam === 'top' ? t('catalog.popular') : (t(`genre.${genreParam}`) || genreParam)} ${typeParam === 'movie' ? t('catalog.movies').toLowerCase() : t('catalog.series').toLowerCase()}`;
 
   return (
     <div className="fade-in">
@@ -273,14 +294,8 @@ function CatalogContent() {
         }}
       >
         <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {qParam ? (
-            <>
-              {loading && <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>}
-              {loading ? `Vyhledávám "${qParam}"...` : `Výsledky vyhledávání pro "${qParam}"`}
-            </>
-          ) : (
-            `${genreParam === 'top' ? 'Populární' : genreParam} ${typeParam === 'movie' ? 'filmy' : 'seriály'}`
-          )}
+          {loading && qParam && <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>}
+          {headerTitle}
         </h2>
 
         <SortDropdown currentSort={sortParam} onSortChange={handleSortChange} />
@@ -298,11 +313,9 @@ function CatalogContent() {
   );
 }
 
-import MovieDetailsClient from '@/components/MovieDetailsClient';
-import SettingsPage from '@/app/settings/page';
-
 function useCurrentView() {
   const [view, setView] = useState<{ type: 'catalog' | 'settings' | 'movie'; mediaType?: string; id?: string }>({ type: 'catalog' });
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     function updateView() {
@@ -345,17 +358,11 @@ function useCurrentView() {
     window.addEventListener('popstate', updateView);
     window.addEventListener('hashchange', updateView);
 
-    const originalPushState = history.pushState;
-    history.pushState = function (...args) {
-      originalPushState.apply(this, args);
-      updateView();
-    };
     return () => {
       window.removeEventListener('popstate', updateView);
       window.removeEventListener('hashchange', updateView);
-      history.pushState = originalPushState;
     };
-  }, []);
+  }, [searchParams]);
 
   return view;
 }

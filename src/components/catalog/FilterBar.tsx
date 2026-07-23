@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { t, i18nEventTarget } from '@/lib/i18n';
 
 interface FilterBarProps {
   currentGenre: string;
@@ -23,6 +24,19 @@ export function FilterBar({
 }: FilterBarProps) {
   const [inputVal, setInputVal] = useState(searchQuery);
   const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
+  const [, setLangTick] = useState(0);
+
+  useEffect(() => {
+    const handleLangChange = () => setLangTick(t => t + 1);
+    if (i18nEventTarget) {
+      i18nEventTarget.addEventListener('languageChange', handleLangChange);
+    }
+    return () => {
+      if (i18nEventTarget) {
+        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
+      }
+    };
+  }, []);
 
   if (prevSearchQuery !== searchQuery) {
     setPrevSearchQuery(searchQuery);
@@ -49,7 +63,7 @@ export function FilterBar({
             <input
               type="text"
               className="input"
-              placeholder={`Hledat ${type === 'movie' ? 'film' : 'seriál'}...`}
+              placeholder={t('catalog.search_placeholder')}
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               style={{ padding: '1rem 3.5rem 1rem 1.5rem', fontSize: '1.1rem', borderRadius: '2rem', width: '100%' }}
@@ -107,10 +121,10 @@ export function FilterBar({
             {isSearching ? (
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px', borderTopColor: '#fff' }}></div>
-                Hledám...
+                {t('catalog.searching')}...
               </span>
             ) : (
-              'Hledat'
+              '🔍'
             )}
           </button>
         </form>
@@ -128,6 +142,7 @@ export function FilterBar({
         >
           {genres.map((g) => {
             const isActive = currentGenre === g;
+            const genreLabel = t(`genre.${g}`);
             return (
               <button
                 key={g}
@@ -144,7 +159,7 @@ export function FilterBar({
                   transition: 'all 0.2s',
                 }}
               >
-                {g === 'top' ? 'Populární' : g}
+                {genreLabel}
               </button>
             );
           })}

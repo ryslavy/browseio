@@ -1,5 +1,5 @@
 // BrowseIO Translation System (i18n)
-// Allows users to add custom translations via Settings
+// Supports Czech (CS) and English (EN) out-of-the-box, plus user-defined custom JSON translations in Settings.
 
 export interface TranslationMap {
   [key: string]: string;
@@ -8,19 +8,26 @@ export interface TranslationMap {
 const STORAGE_KEY = 'browseio_translations';
 const LANG_KEY = 'browseio_language';
 
+// Event target for reactive language changes across components
+export const i18nEventTarget = typeof window !== 'undefined' ? new EventTarget() : null;
+
 // Default Czech translations (built-in)
 const CS_TRANSLATIONS: TranslationMap = {
-  // Navigation
+  // Navbar & Layout
   'nav.home': 'Domů',
   'nav.settings': 'Nastavení',
+  'nav.language': 'Jazyk',
 
-  // Catalog
+  // Catalog & Search
+  'catalog.title': 'BrowseIO',
   'catalog.movies': 'Filmy',
   'catalog.series': 'Seriály',
   'catalog.popular': 'Populární',
   'catalog.searching': 'Vyhledávám',
   'catalog.search_results': 'Výsledky vyhledávání pro',
   'catalog.search_placeholder': 'Hledat filmy a seriály...',
+  'catalog.no_results': 'Žádné tituly nebyly nalezeny.',
+  'catalog.no_image': 'Bez obrázku',
 
   // Genres
   'genre.top': 'Populární',
@@ -45,26 +52,61 @@ const CS_TRANSLATIONS: TranslationMap = {
   'genre.Western': 'Western',
   'genre.Reality-TV': 'Reality TV',
 
-  // Movie Details
-  'details.streams': 'Dostupné streamy',
-  'details.no_streams': 'Žádné dostupné streamy. Přidejte doplňky v Nastavení.',
-  'details.loading': 'Načítám streamy z doplňků...',
-  'details.source': 'Zdroj',
-  'details.all': 'Všechny',
-  'details.web_player': 'Web Player',
-  'details.potplayer': 'PotPlayer',
-  'details.download': 'Stáhnout',
-  'details.season': 'Sezóna',
-  'details.episode': 'Epizoda',
-  'details.episodes': 'Epizody',
+  // Stream Filters & Sorting
+  'streams.title': 'Dostupné streamy',
+  'streams.searching_more': 'Hledám další zdroje...',
+  'streams.filter_source': 'Zdroj:',
+  'streams.filter_quality': 'Kvalita:',
+  'streams.filter_audio': 'Jazyk:',
+  'streams.sort_label': 'Řadit dle:',
+  'streams.sort_quality': 'Kvality (4K → SD)',
+  'streams.sort_seeders': 'Počtu seedů (Nejvíce)',
+  'streams.sort_size_desc': 'Velikosti (Největší)',
+  'streams.sort_size_asc': 'Velikosti (Nejmenší)',
+  'streams.sort_name': 'Názvu (A-Z)',
+  'streams.quick_all': 'Všechny zdroje',
+  'streams.quick_cz': '🔊 Pouze CZ / SK Dabing',
+  'streams.quick_debrid': '⚡ Pouze Instant Debrid',
+  'streams.quick_4k': '☀️ Pouze 4K / 2160p',
+  'streams.quick_1080p': '📺 Pouze 1080p Full HD',
+  'streams.quality_all': 'Všechny kvality',
+  'streams.quality_4k': '☀️ 4K UHD',
+  'streams.quality_1080p': '📺 1080p HD',
+  'streams.quality_720p': '📺 720p HD',
+  'streams.quality_sd': '📀 SD / 480p',
+  'streams.audio_all': 'Všechny jazyky',
+  'streams.audio_cz': '🔊 CZ / SK Dabing',
+  'streams.audio_en': '🇬🇧 Titulky / EN',
+  'streams.debrid_badge': '⚡ TorBox Instant (Debrid)',
+  'streams.seeders': 'seedů',
+  'streams.unknown_size': 'Neznámá velikost',
+  'streams.no_streams': 'Žádné streamy nebyly nalezeny pro vybraný filtr.',
+  'streams.no_plugins_notice': 'Zatím nemáte přidané žádné funkční doplňky. Přidejte si doplňky v Nastavení.',
+  'streams.manage_plugins': '⚙️ Spravovat doplňky v Nastavení',
+  'streams.play_web': '▶ Přehrát v aplikaci',
+  'streams.play_debrid': '⚡ Instant Play (TorBox)',
+  'streams.potplayer': '🍿 PotPlayer',
+  'streams.download': '⬇️ Stáhnout',
+  'streams.copy_link': '📋 Kopírovat odkaz',
+  'streams.link_copied': '✓ Odkaz zkopírován!',
 
-  // Settings
+  // Movie Details Page
+  'details.not_found': 'Film nebo seriál nebyl nalezen.',
+  'details.back': '← Zpět na katalog',
+  'details.seasons': 'Série',
+  'details.episodes': 'Epizody',
+  'details.specials': 'Speciály',
+  'details.released': 'Vydáno:',
+  'details.no_description': 'Popis není k dispozici.',
+
+  // Settings Page
   'settings.title': 'Nastavení BrowseIO',
   'settings.plugins_title': 'Doplňky a Scrapery (Stremio & Nuvio Compatible)',
-  'settings.plugins_desc': 'Vložte URL adresu jakéhokoliv Stremio Addonu nebo Nuvio Pluginu.',
+  'settings.plugins_desc': 'Vložte URL adresu jakéhokoliv Stremio Addonu nebo Nuvio Pluginu pro načítání streamů.',
   'settings.plugin_url_placeholder': 'stremio://... nebo https://.../manifest.json',
   'settings.add_plugin': 'Přidat doplněk',
   'settings.installing': 'Instaluji...',
+  'settings.install_error': 'Nepodařilo se nainstalovat doplněk.',
   'settings.installed_plugins': 'Nainstalované doplňky',
   'settings.no_plugins': 'Zatím nemáte nainstalované žádné doplňky. Přidejte doplněk výše!',
   'settings.active': 'Aktivní',
@@ -79,12 +121,12 @@ const CS_TRANSLATIONS: TranslationMap = {
   'settings.torbox_hint': 'Pokud zadáte API klíč, aplikace ověří které torrenty jsou již kešovány.',
   'settings.save': 'Uložit nastavení',
   'settings.saved': 'Nastavení bylo úspěšně uloženo!',
-  'settings.language_title': 'Jazyk a překlady',
-  'settings.language_label': 'Jazyk rozhraní',
+  'settings.language_title': 'Jazyk rozhraní a překlady',
+  'settings.language_label': 'Výběr jazyka',
   'settings.custom_translations_label': 'Vlastní překlady (JSON)',
-  'settings.custom_translations_hint': 'Zadejte JSON objekt s vlastními překlady. Klíče najdete v dokumentaci.',
+  'settings.custom_translations_hint': 'Zadejte JSON objekt s vlastními klíči překladů. Příklad: { "catalog.movies": "Filmy" }',
 
-  // Sort
+  // Catalog Sorter Dropdown
   'sort.popularity': 'Dle popularity',
   'sort.year_desc': 'Nejnovější',
   'sort.year_asc': 'Nejstarší',
@@ -93,34 +135,103 @@ const CS_TRANSLATIONS: TranslationMap = {
   'sort.name_desc': 'Z-A',
 };
 
+// Full English translations (built-in)
 const EN_TRANSLATIONS: TranslationMap = {
+  // Navbar & Layout
   'nav.home': 'Home',
   'nav.settings': 'Settings',
+  'nav.language': 'Language',
+
+  // Catalog & Search
+  'catalog.title': 'BrowseIO',
   'catalog.movies': 'Movies',
   'catalog.series': 'Series',
   'catalog.popular': 'Popular',
   'catalog.searching': 'Searching',
   'catalog.search_results': 'Search results for',
   'catalog.search_placeholder': 'Search movies and series...',
+  'catalog.no_results': 'No titles found.',
+  'catalog.no_image': 'No image',
+
+  // Genres
   'genre.top': 'Popular',
-  'details.streams': 'Available streams',
-  'details.no_streams': 'No available streams. Add plugins in Settings.',
-  'details.loading': 'Loading streams from plugins...',
-  'details.source': 'Source',
-  'details.all': 'All',
-  'details.web_player': 'Web Player',
-  'details.potplayer': 'PotPlayer',
-  'details.download': 'Download',
-  'details.season': 'Season',
-  'details.episode': 'Episode',
+  'genre.Action': 'Action',
+  'genre.Adventure': 'Adventure',
+  'genre.Animation': 'Animation',
+  'genre.Biography': 'Biography',
+  'genre.Comedy': 'Comedy',
+  'genre.Crime': 'Crime',
+  'genre.Documentary': 'Documentary',
+  'genre.Drama': 'Drama',
+  'genre.Family': 'Family',
+  'genre.Fantasy': 'Fantasy',
+  'genre.History': 'History',
+  'genre.Horror': 'Horror',
+  'genre.Mystery': 'Mystery',
+  'genre.Romance': 'Romance',
+  'genre.Sci-Fi': 'Sci-Fi',
+  'genre.Sport': 'Sport',
+  'genre.Thriller': 'Thriller',
+  'genre.War': 'War',
+  'genre.Western': 'Western',
+  'genre.Reality-TV': 'Reality TV',
+
+  // Stream Filters & Sorting
+  'streams.title': 'Available Streams',
+  'streams.searching_more': 'Searching more sources...',
+  'streams.filter_source': 'Source:',
+  'streams.filter_quality': 'Quality:',
+  'streams.filter_audio': 'Audio/Lang:',
+  'streams.sort_label': 'Sort by:',
+  'streams.sort_quality': 'Quality (4K → SD)',
+  'streams.sort_seeders': 'Seeders Count (Highest)',
+  'streams.sort_size_desc': 'File Size (Largest)',
+  'streams.sort_size_asc': 'File Size (Smallest)',
+  'streams.sort_name': 'Name (A-Z)',
+  'streams.quick_all': 'All Sources',
+  'streams.quick_cz': '🔊 CZ / SK Audio Only',
+  'streams.quick_debrid': '⚡ Instant Debrid Only',
+  'streams.quick_4k': '☀️ 4K / 2160p Only',
+  'streams.quick_1080p': '📺 1080p Full HD Only',
+  'streams.quality_all': 'All Qualities',
+  'streams.quality_4k': '☀️ 4K UHD',
+  'streams.quality_1080p': '📺 1080p HD',
+  'streams.quality_720p': '📺 720p HD',
+  'streams.quality_sd': '📀 SD / 480p',
+  'streams.audio_all': 'All Languages',
+  'streams.audio_cz': '🔊 CZ / SK Audio',
+  'streams.audio_en': '🇬🇧 Subtitles / EN',
+  'streams.debrid_badge': '⚡ TorBox Instant (Debrid)',
+  'streams.seeders': 'seeders',
+  'streams.unknown_size': 'Unknown size',
+  'streams.no_streams': 'No streams found matching the selected filter.',
+  'streams.no_plugins_notice': 'You do not have any active plugins installed yet. Add plugins in Settings.',
+  'streams.manage_plugins': '⚙️ Manage Plugins in Settings',
+  'streams.play_web': '▶ Play in App',
+  'streams.play_debrid': '⚡ Instant Play (TorBox)',
+  'streams.potplayer': '🍿 PotPlayer',
+  'streams.download': '⬇️ Download',
+  'streams.copy_link': '📋 Copy Link',
+  'streams.link_copied': '✓ Link Copied!',
+
+  // Movie Details Page
+  'details.not_found': 'Movie or series not found.',
+  'details.back': '← Back to Catalog',
+  'details.seasons': 'Seasons',
   'details.episodes': 'Episodes',
+  'details.specials': 'Specials',
+  'details.released': 'Released:',
+  'details.no_description': 'No description available.',
+
+  // Settings Page
   'settings.title': 'BrowseIO Settings',
   'settings.plugins_title': 'Plugins & Scrapers (Stremio & Nuvio Compatible)',
-  'settings.plugins_desc': 'Enter a URL of any Stremio Addon or Nuvio Plugin.',
+  'settings.plugins_desc': 'Enter any Stremio Addon or Nuvio Plugin URL to stream media.',
   'settings.plugin_url_placeholder': 'stremio://... or https://.../manifest.json',
-  'settings.add_plugin': 'Add plugin',
+  'settings.add_plugin': 'Add Plugin',
   'settings.installing': 'Installing...',
-  'settings.installed_plugins': 'Installed plugins',
+  'settings.install_error': 'Failed to install plugin.',
+  'settings.installed_plugins': 'Installed Plugins',
   'settings.no_plugins': 'No plugins installed yet. Add a plugin above!',
   'settings.active': 'Active',
   'settings.disabled': 'Disabled',
@@ -131,17 +242,19 @@ const EN_TRANSLATIONS: TranslationMap = {
   'settings.cors_proxy_hint': 'Allows bypassing browser CORS restrictions for client scrapers.',
   'settings.torbox_label': 'TorBox API Key (Debrid)',
   'settings.torbox_placeholder': 'Enter your TorBox API Key...',
-  'settings.torbox_hint': 'If set, the app will check which torrents are already cached.',
-  'settings.save': 'Save settings',
+  'settings.torbox_hint': 'If set, the app checks which torrents are already cached for instant play.',
+  'settings.save': 'Save Settings',
   'settings.saved': 'Settings saved successfully!',
-  'settings.language_title': 'Language & Translations',
-  'settings.language_label': 'Interface language',
-  'settings.custom_translations_label': 'Custom translations (JSON)',
-  'settings.custom_translations_hint': 'Enter a JSON object with custom translations. See docs for keys.',
-  'sort.popularity': 'By popularity',
-  'sort.year_desc': 'Newest first',
-  'sort.year_asc': 'Oldest first',
-  'sort.rating_desc': 'Top rated',
+  'settings.language_title': 'Interface Language & Translations',
+  'settings.language_label': 'Select Language',
+  'settings.custom_translations_label': 'Custom Translations (JSON)',
+  'settings.custom_translations_hint': 'Provide a JSON object with custom keys to override UI text.',
+
+  // Catalog Sorter Dropdown
+  'sort.popularity': 'By Popularity',
+  'sort.year_desc': 'Newest First',
+  'sort.year_asc': 'Oldest First',
+  'sort.rating_desc': 'Top Rated',
   'sort.name_asc': 'A-Z',
   'sort.name_desc': 'Z-A',
 };
@@ -159,6 +272,9 @@ export function getCurrentLanguage(): string {
 export function setCurrentLanguage(lang: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(LANG_KEY, lang);
+  if (i18nEventTarget) {
+    i18nEventTarget.dispatchEvent(new Event('languageChange'));
+  }
 }
 
 export function getCustomTranslations(): TranslationMap {
@@ -175,11 +291,14 @@ export function getCustomTranslations(): TranslationMap {
 export function saveCustomTranslations(translations: TranslationMap): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(translations));
+  if (i18nEventTarget) {
+    i18nEventTarget.dispatchEvent(new Event('languageChange'));
+  }
 }
 
 /**
  * Get a translated string by key.
- * Priority: custom translations > current language > Czech fallback > key itself
+ * Priority: custom user translations > current language > Czech fallback > key
  */
 export function t(key: string): string {
   const custom = getCustomTranslations();
@@ -195,10 +314,10 @@ export function t(key: string): string {
   return key;
 }
 
-export function getAvailableLanguages(): { code: string; label: string }[] {
+export function getAvailableLanguages(): { code: string; label: string; flag: string }[] {
   return [
-    { code: 'cs', label: 'Čeština' },
-    { code: 'en', label: 'English' },
+    { code: 'cs', label: 'Čeština', flag: '🇨🇿' },
+    { code: 'en', label: 'English', flag: '🇬🇧' },
   ];
 }
 

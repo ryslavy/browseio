@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { t, i18nEventTarget } from '@/lib/i18n';
 
 interface CatalogHeaderProps {
   type: 'movie' | 'series';
@@ -11,6 +12,20 @@ export function CatalogHeader({
   type,
   onTypeChange,
 }: CatalogHeaderProps) {
+  const [, setLangTick] = useState(0);
+
+  useEffect(() => {
+    const handleLangChange = () => setLangTick(t => t + 1);
+    if (i18nEventTarget) {
+      i18nEventTarget.addEventListener('languageChange', handleLangChange);
+    }
+    return () => {
+      if (i18nEventTarget) {
+        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
+      }
+    };
+  }, []);
+
   return (
     <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
       <h1
@@ -23,7 +38,7 @@ export function CatalogHeader({
           fontWeight: 800,
         }}
       >
-        BrowseIO
+        {t('catalog.title')}
       </h1>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
@@ -33,7 +48,7 @@ export function CatalogHeader({
           onClick={() => onTypeChange('movie')}
           style={{ minWidth: '120px' }}
         >
-          Filmy
+          🎬 {t('catalog.movies')}
         </button>
         <button
           type="button"
@@ -41,7 +56,7 @@ export function CatalogHeader({
           onClick={() => onTypeChange('series')}
           style={{ minWidth: '120px' }}
         >
-          Seriály
+          📺 {t('catalog.series')}
         </button>
       </div>
     </div>

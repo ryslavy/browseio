@@ -1,28 +1,42 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { SortMode } from '@/lib/catalog-sorter';
+import { t, i18nEventTarget } from '@/lib/i18n';
 
 interface SortDropdownProps {
   currentSort: SortMode;
   onSortChange: (sortMode: SortMode) => void;
 }
 
-const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'popularity', label: 'Nejoblíbenější' },
-  { value: 'rating_desc', label: 'Nejlépe hodnocené (od nejvyššího)' },
-  { value: 'rating_asc', label: 'Nejhůře hodnocené (od nejnižšího)' },
-  { value: 'release_desc', label: 'Nejnovější (podle roku)' },
-  { value: 'release_asc', label: 'Nejstarší (podle roku)' },
-  { value: 'title_asc', label: 'Název (A - Z)' },
-  { value: 'title_desc', label: 'Název (Z - A)' },
-];
-
 export function SortDropdown({ currentSort, onSortChange }: SortDropdownProps) {
+  const [, setLangTick] = useState(0);
+
+  useEffect(() => {
+    const handleLangChange = () => setLangTick(t => t + 1);
+    if (i18nEventTarget) {
+      i18nEventTarget.addEventListener('languageChange', handleLangChange);
+    }
+    return () => {
+      if (i18nEventTarget) {
+        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
+      }
+    };
+  }, []);
+
+  const sortOptions: { value: SortMode; label: string }[] = [
+    { value: 'popularity', label: t('sort.popularity') },
+    { value: 'rating_desc', label: t('sort.rating_desc') },
+    { value: 'release_desc', label: t('sort.year_desc') },
+    { value: 'release_asc', label: t('sort.year_asc') },
+    { value: 'title_asc', label: t('sort.name_asc') },
+    { value: 'title_desc', label: t('sort.name_desc') },
+  ];
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
       <label htmlFor="sort-select" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-        Řadit dle:
+        {t('streams.sort_label')}
       </label>
       <select
         id="sort-select"
@@ -40,7 +54,7 @@ export function SortDropdown({ currentSort, onSortChange }: SortDropdownProps) {
           border: '1px solid rgba(255, 255, 255, 0.1)',
         }}
       >
-        {SORT_OPTIONS.map((opt) => (
+        {sortOptions.map((opt) => (
           <option key={opt.value} value={opt.value} style={{ backgroundColor: '#1a1d24', color: '#fff' }}>
             {opt.label}
           </option>

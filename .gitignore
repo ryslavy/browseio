@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agents & temp build artifacts
+.agents/
+*.txt
+CLAUDE.md
+ORIGINAL_REQUEST.md
+
