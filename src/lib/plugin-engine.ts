@@ -134,9 +134,7 @@ const customRequire = (moduleName: string) => {
 };
 
 /**
- * Fetches a URL with CORS proxy fallback.
- * For Nuvio scrapers: uses proxies with 4s timeout.
- * Throws if all attempts fail.
+ * Fetches a URL with direct fetch attempt first (3.5s timeout) followed by CORS proxy fallbacks.
  */
 const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -146,26 +144,46 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     return fetch(input, init);
   }
 
+  // 1. Check if user configured a custom CORS proxy in Settings
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
-  const corsProxies: ((u: string) => string)[] = [];
-
   if (customProxy && customProxy.trim()) {
     const cp = customProxy.trim();
-    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
+    const proxiedUrl = cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(urlStr)}` : `${cp}/${urlStr}`;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(proxiedUrl, { ...init, signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) return res;
+    } catch (e) {
+      // Ignore, fallback
+    }
   }
 
-  corsProxies.push(
+  // 2. Direct fetch attempt first (3.5s timeout) — works for sktorrent.eu, hellspy, etc.
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(input, { ...init, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) return res;
+  } catch (e) {
+    // Direct fetch restricted by CORS or timed out, fallback to proxy list
+  }
+
+  // 3. Fallback CORS proxy list
+  const corsProxies: ((u: string) => string)[] = [
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
     (u: string) => `https://cors.eu.org/${u}`,
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
-  );
+    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+  ];
 
   for (const proxyFn of corsProxies) {
     try {
       const proxiedUrl = proxyFn(urlStr);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const res = await fetch(proxiedUrl, {
         ...init,
@@ -177,17 +195,6 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     } catch (e) {
       // Fast fail, try next proxy
     }
-  }
-
-  // Direct fetch fallback if all proxies failed or allowed CORS
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(input, { ...init, signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (res.ok) return res;
-  } catch (e) {
-    // Ignore
   }
 
   throw new Error(`CORS_FETCH_FAILED: ${urlStr}`);
