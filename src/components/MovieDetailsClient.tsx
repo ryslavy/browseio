@@ -1,31 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
-import { getInstalledPlugins, fetchStreamsFromPlugin } from '@/lib/plugin-engine';
-import { checkTorBoxCached, resolveTorBoxStreamUrl, cacheTorBoxTorrent } from '@/lib/torbox';
+import { getInstalledPlugins, fetchStreamsFromPlugin, StreamSource } from '@/lib/plugin-engine';
+import { checkTorBoxCached, resolveTorBoxStreamUrl } from '@/lib/torbox';
 import { t, i18nEventTarget } from '@/lib/i18n';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), { ssr: false });
-
-interface MediaSource {
-  name?: string;
-  title?: string;
-  infoHash?: string;
-  magnet?: string;
-  url?: string | null;
-  size?: string;
-  seeders?: number;
-  seeds?: number;
-  isTorBoxCached?: boolean;
-  headers?: Record<string, string>;
-  subtitles?: any[];
-  behaviorHints?: any;
-}
 
 interface MovieDetailsClientProps {
   type?: string;
@@ -68,15 +52,16 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
   const type = propType || (params?.type as string) || searchType || 'movie';
 
   const [meta, setMeta] = useState<MetaItem | null>(null);
-  const [sources, setSources] = useState<MediaSource[]>([]);
+  const [sources, setSources] = useState<StreamSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchingStreams, setFetchingStreams] = useState(false);
   const [posterError, setPosterError] = useState(false);
   const [playingUrl, setPlayingUrl] = useState<string | null>(null);
   const [playingTitle, setPlayingTitle] = useState<string>('');
 
-  // Filters & Sorting state for Streams
-  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  // 2-TIER PLUGIN & SUB-SOURCE FILTERS
+  const [pluginFilter, setPluginFilter] = useState<string>('all'); // 'all' or pluginName/pluginId
+  const [subSourceFilter, setSubSourceFilter] = useState<string>('all'); // 'all' or subProvider name
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>('all');
   const [audioFilter, setAudioFilter] = useState<AudioFilter>('all');
   const [streamSort, setStreamSort] = useState<StreamSortMode>('quality_desc');
@@ -123,7 +108,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       return;
     }
 
-    const checkTorBoxCacheForSources = async (newSources: MediaSource[]) => {
+    const checkTorBoxCacheForSources = async (newSources: StreamSource[]) => {
       const hashesToCheck: string[] = [];
       newSources.forEach(s => {
         const hash = s.infoHash || (s.magnet ? new URLSearchParams(s.magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
@@ -153,7 +138,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       activePlugins.map(async plugin => {
         try {
           const title = meta?.name || meta?.czTitle || meta?.originalTitle;
-          const handlePartial = async (partialRaw: MediaSource[]) => {
+          const handlePartial = async (partialRaw: StreamSource[]) => {
             if (activeFetchIdRef.current !== fetchId || !partialRaw || partialRaw.length === 0) return;
             const processedStreams = await checkTorBoxCacheForSources(partialRaw);
             if (activeFetchIdRef.current === fetchId) {
@@ -190,7 +175,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     return () => clearTimeout(timeout);
   }, [meta, selectedSeason, selectedEpisode, type, id, fetchStreams]);
 
-  const handlePlay = async (source: MediaSource, mode: 'debrid' | 'direct' | 'potplayer' = 'direct') => {
+  const handlePlay = async (source: StreamSource, mode: 'debrid' | 'direct' | 'potplayer' = 'direct') => {
     const torboxApiKey = localStorage.getItem('torbox_api_key');
     const { infoHash, magnet, url, isTorBoxCached } = source;
     const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
@@ -203,7 +188,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         window.location.href = `potplayer://${streamUrl}`;
       } catch (e) {
         console.error('Error launching PotPlayer:', e);
-        alert('Chyba při spouštění PotPlayeru. Ujistěte se, že máte nainstalovaný PotPlayer.');
+        alert('Chyba při spouštění PotPlayeru.');
       }
     };
 
@@ -234,7 +219,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     }
   };
 
-  const handleDownload = async (source: MediaSource) => {
+  const handleDownload = async (source: StreamSource) => {
     const torboxApiKey = localStorage.getItem('torbox_api_key');
     const { infoHash, magnet, url, isTorBoxCached } = source;
     const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
@@ -277,7 +262,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
   const [copiedMagnetIdx, setCopiedMagnetIdx] = useState<number | null>(null);
 
-  const handleCopyMagnet = async (source: MediaSource, idx: number) => {
+  const handleCopyMagnet = async (source: StreamSource, idx: number) => {
     const { infoHash, magnet, url } = source;
     const targetHash = infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : '');
     const linkToCopy = url || magnet || (targetHash ? `magnet:?xt=urn:btih:${targetHash}` : null);
@@ -293,46 +278,64 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     }
   };
 
-  // Provider list derived from plugins and stream sources
-  const availableProviders = useMemo(() => {
-    const plugins = getInstalledPlugins().filter(p => p.enabled);
-    const providersMap = new Map<string, string>();
-    providersMap.set('all', t('streams.quick_all'));
-    
-    plugins.forEach(p => {
-      providersMap.set(p.name, p.name);
+  // ─── TIER 1: MAIN PLUGINS LIST (Installed / Active Plugins) ───
+  const availablePlugins = useMemo(() => {
+    const installed = getInstalledPlugins().filter(p => p.enabled);
+    const pluginsMap = new Map<string, { id: string; name: string }>();
+    pluginsMap.set('all', { id: 'all', name: t('streams.quick_all') });
+
+    installed.forEach(p => {
+      pluginsMap.set(p.name, { id: p.name, name: p.name });
     });
 
     sources.forEach(s => {
-      if (s.name) {
-        let cleanName = s.name;
-        if (/hellspy/i.test(s.name)) cleanName = 'HellSpy';
-        else if (/sktorrent/i.test(s.name)) cleanName = 'SkTorrent';
-        else if (/sktonline/i.test(s.name)) cleanName = 'SkTonline';
-        else if (/torrentio/i.test(s.name)) cleanName = 'Torrentio';
-
-        providersMap.set(cleanName, cleanName);
+      if (s.pluginName && !pluginsMap.has(s.pluginName)) {
+        pluginsMap.set(s.pluginName, { id: s.pluginName, name: s.pluginName });
       }
     });
 
-    const result: { id: string; label: string }[] = [];
-    providersMap.forEach((label, id) => {
-      result.push({ id: id, label: label });
-    });
-    return result;
+    return Array.from(pluginsMap.values());
   }, [sources]);
 
+  // ─── TIER 2: SUB-SOURCES LIST (Dynamically filtered by selected Main Plugin) ───
+  const availableSubSources = useMemo(() => {
+    const subMap = new Map<string, string>();
+    subMap.set('all', pluginFilter === 'all' ? 'Všechny pod-zdroje' : `Všechny pod-zdroje (${pluginFilter})`);
+
+    sources.forEach(s => {
+      // If a specific plugin is selected, only collect sub-providers belonging to that plugin!
+      if (pluginFilter !== 'all') {
+        const matchesPlugin = (s.pluginName && s.pluginName.toLowerCase() === pluginFilter.toLowerCase()) ||
+                              (s.pluginId && s.pluginId.toLowerCase() === pluginFilter.toLowerCase());
+        if (!matchesPlugin) return;
+      }
+
+      const subName = s.subProvider || s.name;
+      if (subName) {
+        let cleanSubName = subName;
+        if (/hellspy/i.test(subName)) cleanSubName = '😈 HellSpy';
+        else if (/sktorrent/i.test(subName) && !/online/i.test(subName)) cleanSubName = '👑 SkTorrent';
+        else if (/sktonline/i.test(subName)) cleanSubName = '©️ SkTonline';
+        else if (/torrentio/i.test(subName)) cleanSubName = 'Torrentio';
+
+        subMap.set(cleanSubName, cleanSubName);
+      }
+    });
+
+    return Array.from(subMap.entries()).map(([id, label]) => ({ id, label }));
+  }, [sources, pluginFilter]);
+
   // Helper functions for quality and audio detection
-  const detectQuality = (s: MediaSource): '4k' | '1080p' | '720p' | 'sd' => {
-    const text = `${s.name || ''} ${s.title || ''}`.toLowerCase();
+  const detectQuality = (s: StreamSource): '4k' | '1080p' | '720p' | 'sd' => {
+    const text = `${s.name || ''} ${s.title || ''} ${s.subProvider || ''}`.toLowerCase();
     if (/4k|2160p|uhd|remux\.2160/i.test(text)) return '4k';
     if (/1080p|fullhd|fhd/i.test(text)) return '1080p';
     if (/720p|hdrip/i.test(text)) return '720p';
     return 'sd';
   };
 
-  const detectAudio = (s: MediaSource): 'cz' | 'en' => {
-    const text = `${s.name || ''} ${s.title || ''}`.toLowerCase();
+  const detectAudio = (s: StreamSource): 'cz' | 'en' => {
+    const text = `${s.name || ''} ${s.title || ''} ${s.subProvider || ''}`.toLowerCase();
     if (/cz|sk|czdab|skdab|dubbing|dabing|🔊/i.test(text)) return 'cz';
     return 'en';
   };
@@ -353,35 +356,45 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
   const processedSources = useMemo(() => {
     let result = [...sources];
 
-    // 1. Provider Filter
-    if (sourceFilter !== 'all') {
+    // 1. Primary Plugin Filter
+    if (pluginFilter !== 'all') {
       result = result.filter(s => {
-        if (s.name && s.name.toLowerCase().includes(sourceFilter.toLowerCase())) return true;
-        if (s.name && sourceFilter.toLowerCase().includes(s.name.toLowerCase())) return true;
-        if (sourceFilter === 'HellSpy' && /hellspy/i.test(s.name || '')) return true;
-        if (sourceFilter === 'SkTorrent' && /sktorrent/i.test(s.name || '')) return true;
-        if (sourceFilter === 'SkTonline' && /sktonline/i.test(s.name || '')) return true;
-        if (sourceFilter === 'Torrentio' && /torrentio/i.test(s.name || '')) return true;
+        if (s.pluginName && s.pluginName.toLowerCase() === pluginFilter.toLowerCase()) return true;
+        if (s.pluginId && s.pluginId.toLowerCase() === pluginFilter.toLowerCase()) return true;
+        if (s.name && s.name.toLowerCase().includes(pluginFilter.toLowerCase())) return true;
         return false;
       });
     }
 
-    // 2. Quality Filter
+    // 2. Secondary Sub-Source Filter
+    if (subSourceFilter !== 'all') {
+      result = result.filter(s => {
+        const subName = s.subProvider || s.name || '';
+        if (subName.toLowerCase().includes(subSourceFilter.toLowerCase())) return true;
+        if (subSourceFilter.includes('HellSpy') && /hellspy/i.test(subName)) return true;
+        if (subSourceFilter.includes('SkTorrent') && /sktorrent/i.test(subName) && !/online/i.test(subName)) return true;
+        if (subSourceFilter.includes('SkTonline') && /sktonline/i.test(subName)) return true;
+        if (subSourceFilter.includes('Torrentio') && /torrentio/i.test(subName)) return true;
+        return false;
+      });
+    }
+
+    // 3. Quality Filter
     if (qualityFilter !== 'all') {
       result = result.filter(s => detectQuality(s) === qualityFilter);
     }
 
-    // 3. Audio Filter
+    // 4. Audio Filter
     if (audioFilter !== 'all') {
       result = result.filter(s => detectAudio(s) === audioFilter);
     }
 
-    // 4. Quick Only Debrid
+    // 5. Quick Only Debrid
     if (onlyDebrid) {
       result = result.filter(s => Boolean(s.isTorBoxCached));
     }
 
-    // 5. Sort
+    // 6. Sort
     result.sort((a, b) => {
       if (streamSort === 'quality_desc') {
         const qOrder = { '4k': 4, '1080p': 3, '720p': 2, 'sd': 1 };
@@ -390,8 +403,8 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         if (qA !== qB) return qB - qA;
       }
       if (streamSort === 'seeders_desc') {
-        const sA = a.seeders || a.seeds || 0;
-        const sB = b.seeders || b.seeds || 0;
+        const sA = a.seeders || 0;
+        const sB = b.seeders || 0;
         if (sA !== sB) return sB - sA;
       }
       if (streamSort === 'size_desc') {
@@ -411,7 +424,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
     });
 
     return result;
-  }, [sources, sourceFilter, qualityFilter, audioFilter, onlyDebrid, streamSort]);
+  }, [sources, pluginFilter, subSourceFilter, qualityFilter, audioFilter, onlyDebrid, streamSort]);
 
   if (loading) {
     return (
@@ -583,62 +596,101 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
           </div>
         </div>
 
-        {/* CONTROLS BAR: Provider Tabs, Quality Tabs, Audio Tabs */}
-        <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '16px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* 1. Sub-provider tabs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '70px' }}>{t('streams.filter_source')}</span>
-            {availableProviders.map(src => (
+        {/* 2-TIER CONTROLS PANEL */}
+        <div className="glass-panel" style={{ padding: '1.25rem 1.5rem', borderRadius: '16px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+          
+          {/* TIER 1: Main Plugin / Addon Selection Pill Row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 700, minWidth: '85px' }}>Doplněk:</span>
+            {availablePlugins.map(p => (
               <button
-                key={src.id}
-                onClick={() => setSourceFilter(src.id)}
-                className={`btn ${sourceFilter === src.id ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ padding: '0.35rem 0.85rem', fontSize: '0.825rem', borderRadius: '9999px' }}
+                key={p.id}
+                onClick={() => {
+                  setPluginFilter(p.id);
+                  setSubSourceFilter('all'); // Reset sub-source filter when main plugin changes
+                }}
+                className={`btn ${pluginFilter === p.id ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ 
+                  padding: '0.4rem 1rem', 
+                  fontSize: '0.85rem', 
+                  borderRadius: '9999px',
+                  fontWeight: pluginFilter === p.id ? 700 : 500
+                }}
               >
-                {src.label}
+                {p.id === 'all' ? '📦 Všechny doplňky' : `🧩 ${p.name}`}
               </button>
             ))}
           </div>
 
-          {/* 2. Quality Tabs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '70px' }}>{t('streams.filter_quality')}</span>
-            {[
-              { id: 'all', label: t('streams.quality_all') },
-              { id: '4k', label: t('streams.quality_4k') },
-              { id: '1080p', label: t('streams.quality_1080p') },
-              { id: '720p', label: t('streams.quality_720p') },
-              { id: 'sd', label: t('streams.quality_sd') },
-            ].map(q => (
-              <button
-                key={q.id}
-                onClick={() => setQualityFilter(q.id as QualityFilter)}
-                className={`btn ${qualityFilter === q.id ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ padding: '0.35rem 0.85rem', fontSize: '0.825rem', borderRadius: '9999px' }}
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
+          {/* TIER 2: Sub-sources / Categories of Selected Plugin */}
+          {availableSubSources.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', paddingLeft: '0.5rem', borderLeft: '3px solid var(--accent-color)' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '80px' }}>Pod-zdroj:</span>
+              {availableSubSources.map(sub => (
+                <button
+                  key={sub.id}
+                  onClick={() => setSubSourceFilter(sub.id)}
+                  className={`btn ${subSourceFilter === sub.id ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ 
+                    padding: '0.35rem 0.85rem', 
+                    fontSize: '0.825rem', 
+                    borderRadius: '9999px',
+                    backgroundColor: subSourceFilter === sub.id ? 'rgba(59, 130, 246, 0.8)' : 'rgba(255,255,255,0.06)'
+                  }}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {/* 3. Audio & Quick Filter Toggles */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '70px' }}>{t('streams.filter_audio')}</span>
-            {[
-              { id: 'all', label: t('streams.audio_all') },
-              { id: 'cz', label: t('streams.audio_cz') },
-              { id: 'en', label: t('streams.audio_en') },
-            ].map(a => (
-              <button
-                key={a.id}
-                onClick={() => setAudioFilter(a.id as AudioFilter)}
-                className={`btn ${audioFilter === a.id ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ padding: '0.35rem 0.85rem', fontSize: '0.825rem', borderRadius: '9999px' }}
-              >
-                {a.label}
-              </button>
-            ))}
+          <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.06)', margin: '0.2rem 0' }} />
 
+          {/* TIER 3 & 4: Quality & Audio Filters */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              {/* Quality Tabs */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Kvalita:</span>
+                {[
+                  { id: 'all', label: t('streams.quality_all') },
+                  { id: '4k', label: t('streams.quality_4k') },
+                  { id: '1080p', label: t('streams.quality_1080p') },
+                  { id: '720p', label: t('streams.quality_720p') },
+                  { id: 'sd', label: t('streams.quality_sd') },
+                ].map(q => (
+                  <button
+                    key={q.id}
+                    onClick={() => setQualityFilter(q.id as QualityFilter)}
+                    className={`btn ${qualityFilter === q.id ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem', borderRadius: '9999px' }}
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Audio Tabs */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Jazyk:</span>
+                {[
+                  { id: 'all', label: t('streams.audio_all') },
+                  { id: 'cz', label: t('streams.audio_cz') },
+                  { id: 'en', label: t('streams.audio_en') },
+                ].map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => setAudioFilter(a.id as AudioFilter)}
+                    className={`btn ${audioFilter === a.id ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem', borderRadius: '9999px' }}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Debrid Toggle */}
             <button
               onClick={() => setOnlyDebrid(prev => !prev)}
               className={`btn ${onlyDebrid ? 'btn-primary' : 'btn-secondary'}`}
@@ -648,8 +700,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                 borderRadius: '9999px',
                 backgroundColor: onlyDebrid ? 'rgba(234, 179, 8, 0.3)' : undefined,
                 color: onlyDebrid ? '#eab308' : undefined,
-                border: onlyDebrid ? '1px solid #eab308' : undefined,
-                marginLeft: 'auto'
+                border: onlyDebrid ? '1px solid #eab308' : undefined
               }}
             >
               {t('streams.quick_debrid')}
@@ -677,7 +728,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
               {t('streams.no_streams')}
             </p>
             <button 
-              onClick={() => { setSourceFilter('all'); setQualityFilter('all'); setAudioFilter('all'); setOnlyDebrid(false); }} 
+              onClick={() => { setPluginFilter('all'); setSubSourceFilter('all'); setQualityFilter('all'); setAudioFilter('all'); setOnlyDebrid(false); }} 
               className="btn btn-secondary"
             >
               Obnovit všechny filtry
@@ -688,6 +739,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
             {processedSources.map((source, idx) => {
               const quality = detectQuality(source);
               const audio = detectAudio(source);
+              const subProviderName = source.subProvider || source.name;
 
               return (
                 <div 
@@ -708,50 +760,57 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                   <div style={{ flex: 1, minWidth: '280px' }}>
                     {/* BADGES HEADER */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
-                      {/* Provider Badge */}
-                      <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
-                        {source.name || 'Doplněk'}
+                      {/* Main Plugin Badge */}
+                      {source.pluginName && (
+                        <span style={{ backgroundColor: 'rgba(139, 92, 246, 0.2)', color: '#c084fc', border: '1px solid rgba(192, 132, 252, 0.3)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                          🧩 {source.pluginName}
+                        </span>
+                      )}
+
+                      {/* Sub-Provider Badge */}
+                      <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                        {subProviderName}
                       </span>
 
                       {/* Quality Badge */}
                       {quality === '4k' && (
-                        <span style={{ background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.25), rgba(168, 85, 247, 0.25))', color: '#fbbf24', border: '1px solid rgba(251, 191, 36, 0.4)', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+                        <span style={{ background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.25), rgba(168, 85, 247, 0.25))', color: '#fbbf24', border: '1px solid rgba(251, 191, 36, 0.4)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800 }}>
                           ☀️ 4K UHD
                         </span>
                       )}
                       {quality === '1080p' && (
-                        <span style={{ backgroundColor: 'rgba(14, 165, 233, 0.2)', color: '#38bdf8', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                        <span style={{ backgroundColor: 'rgba(14, 165, 233, 0.2)', color: '#38bdf8', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
                           📺 1080p HD
                         </span>
                       )}
                       {quality === '720p' && (
-                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
+                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600 }}>
                           📺 720p HD
                         </span>
                       )}
 
                       {/* Audio Badge */}
                       {audio === 'cz' && (
-                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.25)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.25)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
                           🔊 CZ / SK Dabing
                         </span>
                       )}
 
                       {/* Debrid Badge */}
                       {source.isTorBoxCached && (
-                        <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.25)', color: '#facc15', border: '1px solid rgba(250, 204, 21, 0.5)', padding: '0.25rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+                        <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.25)', color: '#facc15', border: '1px solid rgba(250, 204, 21, 0.5)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800 }}>
                           ⚡ TorBox Instant
                         </span>
                       )}
 
                       {/* Seeders & Size */}
                       {typeof source.seeders === 'number' && source.seeders > 0 && (
-                        <span style={{ color: '#34d399', fontSize: '0.85rem', fontWeight: 600 }}>
+                        <span style={{ color: '#34d399', fontSize: '0.825rem', fontWeight: 600 }}>
                           👤 {source.seeders} {t('streams.seeders')}
                         </span>
                       )}
                       {source.size && source.size !== 'Unknown' && (
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.825rem' }}>
                           💾 {source.size}
                         </span>
                       )}

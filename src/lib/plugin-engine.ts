@@ -15,6 +15,9 @@ export interface PluginManifest {
 
 export interface StreamSource {
   name: string;
+  pluginId?: string;
+  pluginName?: string;
+  subProvider?: string;
   title: string;
   url?: string | null;
   magnet?: string;
@@ -101,7 +104,7 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
 /**
  * Smart fetch for Stremio addons: tries direct fetch first (Stremio addons
  * typically set Access-Control-Allow-Origin: *), then falls back to CORS proxies.
- * Has a longer timeout (8s) since Stremio responses can be large.
+ * Has an 8s timeout since Stremio responses can be large.
  */
 const stremioFetch = async (url: string): Promise<Response> => {
   // 1. Try direct fetch first (most Stremio addons support CORS natively)
@@ -283,9 +286,13 @@ export async function fetchStreamsFromPlugin(
                   const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
 
                   const cleanScraperName = scraper.name ? scraper.name.replace(/^[^\w\s\u00C0-\u024F]+/, '').trim() : plugin.name;
+                  const rawSubName = s.name || cleanScraperName || plugin.name;
 
                   const streamObj: StreamSource = {
-                    name: cleanScraperName || plugin.name,
+                    name: rawSubName,
+                    pluginId: plugin.id,
+                    pluginName: plugin.name,
+                    subProvider: rawSubName,
                     title: namePart,
                     url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
                     magnet: magnet,
@@ -354,8 +361,13 @@ export async function fetchStreamsFromPlugin(
       const magnet = s.url && s.url.startsWith('magnet:') ? s.url : (s.magnet || undefined);
       const infoHash = s.infoHash || (magnet ? new URLSearchParams(magnet.split('?')[1]).get('xt')?.replace('urn:btih:', '') : undefined);
 
+      const subName = s.name ? String(s.name).split('\n')[0] : plugin.name;
+
       return {
-        name: s.name || plugin.name,
+        name: subName,
+        pluginId: plugin.id,
+        pluginName: plugin.name,
+        subProvider: subName,
         title: namePart,
         url: s.url && !s.url.startsWith('magnet:') ? s.url : undefined,
         magnet: magnet,
