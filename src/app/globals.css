@@ -108,7 +108,7 @@ a.btn:hover, a.btn-primary:hover, a.btn-secondary:hover, a.glass-pill:hover {
   overflow: hidden;
 }
 
-.glass-panel::before, .btn::before, .glass-pill::before, .glass-navbar::before {
+.glass-panel::before, .btn::before, .glass-pill::before, .glass-navbar::before, .glass-debrid::before {
   content: '';
   position: absolute;
   top: 0;
@@ -127,8 +127,33 @@ a.btn:hover, a.btn-primary:hover, a.btn-secondary:hover, a.glass-pill:hover {
   z-index: 1;
 }
 
-.glass-panel:hover::before, .btn:hover::before, .glass-pill:hover::before, .glass-navbar:hover::before {
+.glass-panel:hover::before, .btn:hover::before, .glass-pill:hover::before, .glass-navbar:hover::before, .glass-debrid:hover::before {
   opacity: 1;
+}
+
+.glass-debrid {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.12) 0%, rgba(234, 179, 8, 0.04) 40%, rgba(0, 0, 0, 0.3) 100%) !important;
+  border: 1px solid rgba(234, 179, 8, 0.35) !important;
+  border-top: 1px solid rgba(253, 224, 71, 0.6) !important;
+  border-left: 1px solid rgba(253, 224, 71, 0.4) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.5) !important;
+  box-shadow: 
+    0 16px 40px rgba(0, 0, 0, 0.5),
+    0 0 25px rgba(234, 179, 8, 0.2),
+    inset var(--light-x, 0px) var(--light-y, 1.5px) 2px rgba(254, 240, 138, 0.5),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+.glass-debrid:hover {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.18) 0%, rgba(234, 179, 8, 0.07) 40%, rgba(0, 0, 0, 0.25) 100%) !important;
+  border-color: rgba(234, 179, 8, 0.5) !important;
+  border-top-color: rgba(253, 224, 71, 0.85) !important;
+  border-left-color: rgba(253, 224, 71, 0.6) !important;
+  box-shadow: 
+    0 20px 48px rgba(0, 0, 0, 0.6),
+    0 0 35px rgba(234, 179, 8, 0.3),
+    inset var(--light-x, 0px) var(--light-y, 2px) 3px rgba(254, 240, 138, 0.7),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* Typography */

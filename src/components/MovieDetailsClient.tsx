@@ -830,7 +830,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
               return (
                 <div 
                   key={idx} 
-                  className="glass-panel" 
+                  className={`glass-panel ${source.isTorBoxCached ? 'glass-debrid' : ''}`} 
                   style={{ 
                     padding: '1.25rem 1.5rem', 
                     borderRadius: '16px',
@@ -838,9 +838,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
                     gap: '1.25rem', 
-                    flexWrap: 'wrap', 
-                    border: source.isTorBoxCached ? '1px solid rgba(234, 179, 8, 0.5)' : '1px solid rgba(255,255,255,0.08)',
-                    boxShadow: source.isTorBoxCached ? '0 0 20px rgba(234, 179, 8, 0.15)' : undefined
+                    flexWrap: 'wrap'
                   }}
                 >
                   <div style={{ flex: 1, minWidth: '280px' }}>
