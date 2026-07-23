@@ -1,5 +1,5 @@
 // TorBox Debrid API client for BrowseIO
-// Supports direct fetch and CORS proxy fallback with token query parameters to avoid CORS preflight failures.
+// Proxies TorBox API requests through working CORS proxies (https://cors.eu.org/) to bypass browser CORS origin restrictions.
 
 const TORBOX_API_BASE = 'https://api.torbox.app/v1/api';
 
@@ -20,22 +20,10 @@ export interface TorBoxCachedResponse {
 
 /**
  * Smart fetch for TorBox API:
- * 1. Tries direct browser fetch.
- * 2. If direct fetch fails (CORS error / network error), falls back to configured CORS proxies.
+ * Tries custom proxy first, then cors.eu.org, then direct fetch.
+ * Passes Authorization: Bearer header.
  */
-async function torboxFetch(url: string, init?: RequestInit): Promise<Response> {
-  // 1. Direct fetch
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(url, { ...init, signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (res.ok) return res;
-  } catch (e) {
-    console.warn(`[TorBox] Direct fetch failed for ${url.slice(0, 60)}..., trying CORS proxies`);
-  }
-
-  // 2. CORS Proxy Fallbacks
+async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Promise<Response> {
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
   const corsProxies: ((u: string) => string)[] = [];
 
@@ -44,22 +32,42 @@ async function torboxFetch(url: string, init?: RequestInit): Promise<Response> {
     corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
   }
 
+  // cors.eu.org supports POST & GET with Authorization headers for TorBox API
   corsProxies.push(
-    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://cors.eu.org/${u}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
   );
+
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string> || {})
+  };
+
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
 
   for (const proxyFn of corsProxies) {
     try {
       const proxiedUrl = proxyFn(url);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(proxiedUrl, { ...init, signal: controller.signal });
+      const res = await fetch(proxiedUrl, { ...init, headers, signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) return res;
     } catch (e) {
-      // Try next
+      // Try next proxy
     }
+  }
+
+  // Direct fetch fallback
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(url, { ...init, headers, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) return res;
+  } catch (e) {
+    console.warn(`[TorBox] Direct fetch failed for ${url.slice(0, 60)}...`);
   }
 
   throw new Error(`TORBOX_FETCH_FAILED: ${url}`);
@@ -70,12 +78,10 @@ export async function checkTorBoxCached(hashes: string[], apiKey?: string): Prom
   if (!hashes || hashes.length === 0) return cachedHashes;
 
   try {
-    // TorBox checkcached accepts up to 100 hashes comma-separated
     const hashList = hashes.join(',');
-    const tokenQuery = apiKey ? `&token=${encodeURIComponent(apiKey)}` : '';
-    const targetUrl = `${TORBOX_API_BASE}/torrents/checkcached?hash=${hashList}&format=object${tokenQuery}`;
+    const targetUrl = `${TORBOX_API_BASE}/torrents/checkcached?hash=${hashList}&format=object`;
 
-    const res = await torboxFetch(targetUrl);
+    const res = await torboxFetch(targetUrl, { method: 'GET' }, apiKey);
     const json: TorBoxCachedResponse = await res.json();
 
     if (json && json.data) {
@@ -99,21 +105,17 @@ export async function resolveTorBoxStreamUrl(magnetOrHash: string, apiKey: strin
   const magnet = magnetOrHash.startsWith('magnet:') ? magnetOrHash : `magnet:?xt=urn:btih:${magnetOrHash}`;
 
   try {
-    // 1. Create/Add Torrent on TorBox (using token in query parameter to avoid CORS preflight issues)
     const bodyData = new URLSearchParams();
     bodyData.append('magnet', magnet);
     bodyData.append('seed', '1');
     bodyData.append('allow_zip', 'false');
 
-    const targetUrl = `${TORBOX_API_BASE}/torrents/createtorrent?token=${encodeURIComponent(apiKey)}`;
-
-    const createRes = await torboxFetch(targetUrl, {
+    const createUrl = `${TORBOX_API_BASE}/torrents/createtorrent`;
+    const createRes = await torboxFetch(createUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: bodyData
-    });
+    }, apiKey);
 
     const createJson = await createRes.json();
     if (!createJson.success || !createJson.data) {
@@ -124,16 +126,15 @@ export async function resolveTorBoxStreamUrl(magnetOrHash: string, apiKey: strin
     const torrentId = createJson.data?.torrent_id || createJson.data?.id || (typeof createJson.data === 'number' || typeof createJson.data === 'string' ? createJson.data : null);
 
     if (!torrentId) {
-      console.error('TorBox torrentId not found in createtorrent response:', createJson);
+      console.error('TorBox torrentId not found in response:', createJson);
       return null;
     }
 
-    // 2. If series with specific season/episode, find target file_id
     let fileIdQuery = '';
     if (season !== undefined && episode !== undefined) {
       try {
-        const listUrl = `${TORBOX_API_BASE}/torrents/mylist?token=${encodeURIComponent(apiKey)}`;
-        const listRes = await torboxFetch(listUrl);
+        const listUrl = `${TORBOX_API_BASE}/torrents/mylist`;
+        const listRes = await torboxFetch(listUrl, { method: 'GET' }, apiKey);
         const listJson = await listRes.json();
 
         if (listJson.success && listJson.data && Array.isArray(listJson.data)) {
@@ -156,13 +157,12 @@ export async function resolveTorBoxStreamUrl(magnetOrHash: string, apiKey: strin
           }
         }
       } catch (e) {
-        console.error('Failed to find specific file_id for TorBox stream:', e);
+        console.error('Failed to find file_id for TorBox stream:', e);
       }
     }
 
-    // 3. Request Download / Direct Stream Link
     const dlUrl = `${TORBOX_API_BASE}/torrents/requestdl?token=${encodeURIComponent(apiKey)}&torrent_id=${torrentId}${fileIdQuery}`;
-    const dlRes = await torboxFetch(dlUrl);
+    const dlRes = await torboxFetch(dlUrl, { method: 'GET' }, apiKey);
     const dlJson = await dlRes.json();
 
     if (dlJson.success && dlJson.data) {
@@ -187,7 +187,7 @@ export async function cacheTorBoxTorrent(magnetOrHash: string, apiKey: string): 
     bodyData.append('seed', '1');
     bodyData.append('allow_zip', 'false');
 
-    const targetUrl = `${TORBOX_API_BASE}/torrents/createtorrent?token=${encodeURIComponent(apiKey)}`;
+    const targetUrl = `${TORBOX_API_BASE}/torrents/createtorrent`;
 
     const res = await torboxFetch(targetUrl, {
       method: 'POST',
@@ -195,13 +195,13 @@ export async function cacheTorBoxTorrent(magnetOrHash: string, apiKey: string): 
         'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: bodyData
-    });
+    }, apiKey);
 
     const json = await res.json();
     if (json.success) {
-      return { success: true, message: json.detail || 'Torrent byl přidán do TorBoxu ke stažení!' };
+      return { success: true, message: json.detail || 'Torrent byl úspěšně přidán do TorBoxu!' };
     } else {
-      return { success: false, message: json.detail || 'Nepodařilo se přidat torrent do TorBoxu' };
+      return { success: false, message: json.detail || json.error || 'Nepodařilo se přidat torrent do TorBoxu' };
     }
   } catch (error: any) {
     return { success: false, message: error.message || 'Chyba při komunikaci s TorBox API' };
