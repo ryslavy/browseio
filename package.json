@@ -10,6 +10,7 @@
     "test": "node --experimental-strip-types scripts/run-e2e-tests.ts"
   },
   "dependencies": {
+    "@next/swc-win32-x64-msvc": "^16.2.11",
     "@types/video.js": "^7.3.58",
     "cheerio": "^1.2.0",
     "next": "16.2.10",

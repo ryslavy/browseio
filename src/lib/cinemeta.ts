@@ -1,3 +1,5 @@
+import { getCurrentLanguage } from '@/lib/i18n';
+
 export interface Episode {
   id: string; // e.g., "tt123456:1:1"
   title: string;
@@ -40,7 +42,37 @@ export async function getCatalog(type: 'movie' | 'series', category: string = 't
 
     const res = await fetch(url);
     const data = await res.json();
-    return data.metas || [];
+    const metas: MetaItem[] = data.metas || [];
+
+    const lang = getCurrentLanguage();
+    if (lang === 'cs' && metas.length > 0) {
+      const enriched = await Promise.all(
+        metas.map(async (item) => {
+          if (!item.id || !item.id.startsWith('tt')) return item;
+          try {
+            const tmdbType = type === 'series' ? 'tv' : 'movie';
+            const tmdbUrl = `https://api.themoviedb.org/3/find/${item.id}?api_key=${TMDB_API_KEY}&external_source=imdb_id&language=cs-CZ`;
+            const tmdbRes = await fetch(tmdbUrl).then(r => r.json());
+            const matchedObj = (tmdbRes.movie_results && tmdbRes.movie_results[0]) || (tmdbRes.tv_results && tmdbRes.tv_results[0]);
+            if (matchedObj) {
+              const czTitle = matchedObj.title || matchedObj.name;
+              const origTitle = matchedObj.original_title || matchedObj.original_name;
+              return {
+                ...item,
+                czTitle: czTitle || item.czTitle,
+                originalTitle: origTitle || item.name,
+              };
+            }
+          } catch {
+            // Silently fallback to original item
+          }
+          return item;
+        })
+      );
+      return enriched;
+    }
+
+    return metas;
   } catch (error) {
     console.error('Error fetching catalog:', error);
     return [];

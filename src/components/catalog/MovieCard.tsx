@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import type { MetaItem } from '@/lib/cinemeta';
+import { t, getCurrentLanguage } from '@/lib/i18n';
 
 interface MovieCardProps {
   movie: MetaItem;
@@ -15,7 +16,12 @@ export function MovieCard({ movie, defaultType = 'movie' }: MovieCardProps) {
   const year = movie.releaseInfo ? movie.releaseInfo : 'N/A';
   const [imgError, setImgError] = useState(false);
 
-  const altText = movie.name ? `${movie.name} (${year}) - Plakát` : 'Plakát titulu';
+  const lang = getCurrentLanguage();
+  const displayName = lang === 'cs'
+    ? (movie.czTitle || movie.name)
+    : (movie.originalTitle || movie.name);
+
+  const altText = `${displayName} (${year})`;
 
   return (
     <Link href={`/?type=${mediaType}&id=${movie.id}`} style={{ display: 'block', textDecoration: 'none' }}>
@@ -52,7 +58,7 @@ export function MovieCard({ movie, defaultType = 'movie' }: MovieCardProps) {
             />
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-              Bez obrázku
+              {t('catalog.no_image')}
             </div>
           )}
           {rating && (
@@ -88,13 +94,13 @@ export function MovieCard({ movie, defaultType = 'movie' }: MovieCardProps) {
               textOverflow: 'ellipsis',
               fontWeight: 600,
             }}
-            title={movie.name}
+            title={displayName}
           >
-            {movie.name}
+            {displayName}
           </h3>
           <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             <span>{year}</span>
-            <span style={{ textTransform: 'capitalize' }}>{mediaType === 'series' ? 'Seriál' : 'Film'}</span>
+            <span style={{ textTransform: 'capitalize' }}>{mediaType === 'series' ? t('catalog.series') : t('catalog.movies')}</span>
           </div>
         </div>
       </div>

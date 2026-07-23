@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import { getMetaDetails, MetaItem, Episode } from '@/lib/cinemeta';
 import { getInstalledPlugins, fetchStreamsFromPlugin, StreamSource } from '@/lib/plugin-engine';
 import { checkTorBoxCached, resolveTorBoxStreamUrl, cacheTorBoxTorrent } from '@/lib/torbox';
-import { t, i18nEventTarget } from '@/lib/i18n';
+import { t, getCurrentLanguage, i18nEventTarget } from '@/lib/i18n';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), { ssr: false });
 
@@ -88,6 +88,11 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       setLoading(true);
       const metaData = await getMetaDetails(type as string, id as string);
       setMeta(metaData);
+      if (metaData) {
+        const lang = getCurrentLanguage();
+        const titleName = lang === 'cs' ? (metaData.czTitle || metaData.name) : (metaData.originalTitle || metaData.name);
+        document.title = `${titleName} - BrowseIO`;
+      }
       setLoading(false);
 
       if (type === 'series' && metaData?.videos && metaData.videos.length > 0) {
@@ -559,14 +564,28 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
         </div>
         
         <div style={{ flex: '1 1 400px' }}>
-          <h1 style={{ fontSize: '2.5rem', marginBottom: meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle ? '0.2rem' : '0.5rem', lineHeight: 1.15, fontWeight: 800 }}>
-            {meta.czTitle || meta.name}
-          </h1>
-          {meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle && (
-            <div style={{ fontSize: '1.15rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '1rem', fontWeight: 400 }}>
-              ({meta.originalTitle})
-            </div>
-          )}
+          {(() => {
+            const currentLang = getCurrentLanguage();
+            const primaryTitle = currentLang === 'cs'
+              ? (meta.czTitle || meta.name)
+              : (meta.originalTitle || meta.name);
+            const secondaryTitle = currentLang === 'cs'
+              ? (meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle ? meta.originalTitle : null)
+              : (meta.czTitle && meta.originalTitle && meta.czTitle !== meta.originalTitle ? meta.czTitle : null);
+
+            return (
+              <>
+                <h1 style={{ fontSize: '2.5rem', marginBottom: secondaryTitle ? '0.2rem' : '0.5rem', lineHeight: 1.15, fontWeight: 800 }}>
+                  {primaryTitle}
+                </h1>
+                {secondaryTitle && (
+                  <div style={{ fontSize: '1.15rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '1rem', fontWeight: 400 }}>
+                    ({secondaryTitle})
+                  </div>
+                )}
+              </>
+            );
+          })()}
           
           <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.9rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <span>{meta.releaseInfo}</span>
