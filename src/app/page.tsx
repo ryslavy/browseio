@@ -333,7 +333,13 @@ function useCurrentView() {
       const hash = typeof window !== 'undefined' ? window.location.hash : '';
       const sp = new URLSearchParams(search);
 
-      // 1. Settings View
+      // 1. Explicit Landing Page View (?view=landing)
+      if (sp.get('view') === 'landing') {
+        setView({ type: 'landing' });
+        return;
+      }
+
+      // 2. Settings View
       if (path.includes('/settings') || hash.includes('settings') || sp.get('page') === 'settings') {
         setView({ type: 'settings' });
         return;

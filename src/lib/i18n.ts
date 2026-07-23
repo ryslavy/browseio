@@ -15,8 +15,30 @@ export const i18nEventTarget = typeof window !== 'undefined' ? new EventTarget()
 const CS_TRANSLATIONS: TranslationMap = {
   // Navbar & Layout
   'nav.home': 'Domů',
+  'nav.catalog': '🎬 Katalog',
   'nav.settings': 'Nastavení',
   'nav.language': 'Jazyk',
+
+  // Landing Page
+  'landing.experience': '✨ Antigravity Streaming Experience • BrowseIO v2.0',
+  'landing.title': 'Objevujte a streamujte v moderním rozhraní',
+  'landing.subtitle': 'BrowseIO propojují vaše oblíbené Stremio addony, Nuvio pluginy a TorBox Debrid akceleraci do jednoho bleskového rozhraní bez reklam.',
+  'landing.browse_movies': '🎬 Procházet Filmy',
+  'landing.browse_series': '📺 Procházet Seriály',
+  'landing.badge_addons': '🧩 Podpora Stremio & Nuvio doplňků',
+  'landing.badge_debrid': '⚡ TorBox Debrid Akcelerace',
+  'landing.badge_players': '🍿 PotPlayer, VLC, MPV & Web Player',
+  'landing.badge_lang': '🌐 Česky & English',
+  'landing.feat1_title': 'Multi-Plugin Engine',
+  'landing.feat1_desc': 'Připojte jakýkoliv Stremio Addon (Torrentio, Cinemeta) i spouštěcí Nuvio JS skripty (4KHDHub, HellSpy, SkTorrent) a prohledávejte všechny zdroje současně.',
+  'landing.feat2_title': 'Debrid & TorBox Kešování',
+  'landing.feat2_desc': 'Automatická detekce cachenutých torrentů. Kliknutím na tlačítko ⚡ přidejte jakýkoliv torrent okamžitě na váš TorBox účet pro přehrání bez čekání.',
+  'landing.feat3_title': 'Váš Oblíbený Přehrávač',
+  'landing.feat3_desc': 'Přehrávejte přímo v prohlížeči nebo otevírejte videa jedním kliknutím v desktopovém prehravaci PotPlayer, VLC, MPV nebo Infuse.',
+  'landing.cta_title': 'Připraveni začít?',
+  'landing.cta_subtitle': 'Otevřete katalog a objevujte nejnovější a nejpopulárnější tituly.',
+  'landing.open_catalog': '🚀 Otevřít Katalog',
+  'landing.settings_addons': '⚙️ Nastavení Doplňků',
 
   // Catalog & Search
   'catalog.title': 'BrowseIO',
@@ -145,8 +167,30 @@ const CS_TRANSLATIONS: TranslationMap = {
 const EN_TRANSLATIONS: TranslationMap = {
   // Navbar & Layout
   'nav.home': 'Home',
+  'nav.catalog': '🎬 Catalog',
   'nav.settings': 'Settings',
   'nav.language': 'Language',
+
+  // Landing Page
+  'landing.experience': '✨ Antigravity Streaming Experience • BrowseIO v2.0',
+  'landing.title': 'Discover and stream in a modern UI',
+  'landing.subtitle': 'BrowseIO seamlessly connects your favorite Stremio add-ons, Nuvio plugins, and TorBox Debrid acceleration into one ultra-fast ad-free interface.',
+  'landing.browse_movies': '🎬 Browse Movies',
+  'landing.browse_series': '📺 Browse Series',
+  'landing.badge_addons': '🧩 Stremio & Nuvio Addon Support',
+  'landing.badge_debrid': '⚡ TorBox Debrid Acceleration',
+  'landing.badge_players': '🍿 PotPlayer, VLC, MPV & Web Player',
+  'landing.badge_lang': '🌐 Czech & English',
+  'landing.feat1_title': 'Multi-Plugin Engine',
+  'landing.feat1_desc': 'Connect any Stremio Addon (Torrentio, Cinemeta) as well as executable Nuvio JS scripts (4KHDHub, HellSpy, SkTorrent) to search all sources simultaneously.',
+  'landing.feat2_title': 'Debrid & TorBox Caching',
+  'landing.feat2_desc': 'Automatic detection of cached torrents. Click ⚡ to instantly cache any torrent to your TorBox account for zero-buffer instant play.',
+  'landing.feat3_title': 'Your Preferred Player',
+  'landing.feat3_desc': 'Stream directly in your browser or launch videos with one click into PotPlayer, VLC, MPV, or Infuse desktop players.',
+  'landing.cta_title': 'Ready to start?',
+  'landing.cta_subtitle': 'Open the catalog and discover the latest and most popular titles.',
+  'landing.open_catalog': '🚀 Open Catalog',
+  'landing.settings_addons': '⚙️ Addon Settings',
 
   // Catalog & Search
   'catalog.title': 'BrowseIO',

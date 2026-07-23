@@ -24,7 +24,7 @@ export default function LandingPage() {
       {/* HERO SECTION */}
       <section style={{ textAlign: 'center', padding: '4rem 1.5rem 3rem 1.5rem', position: 'relative' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'rgba(59, 130, 246, 0.12)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '0.4rem 1rem', borderRadius: '9999px', fontSize: '0.85rem', fontWeight: 600, marginBottom: '1.75rem' }}>
-          ✨ Antigravity Streaming Experience • BrowseIO v2.0
+          {t('landing.experience')}
         </div>
 
         <h1
@@ -39,11 +39,11 @@ export default function LandingPage() {
             lineHeight: 1.15,
           }}
         >
-          Objevujte a streamujte v moderním rozhraní
+          {t('landing.title')}
         </h1>
 
         <p style={{ maxWidth: '720px', margin: '0 auto 2.5rem auto', color: 'var(--text-secondary)', fontSize: '1.15rem', lineHeight: 1.75 }}>
-          BrowseIO propojují vaše oblíbené Stremio addony, Nuvio pluginy a TorBox Debrid akceleraci do jednoho bleskového rozhraní bez reklam.
+          {t('landing.subtitle')}
         </p>
 
         {/* CTA BUTTONS */}
@@ -61,7 +61,7 @@ export default function LandingPage() {
               boxShadow: '0 12px 32px rgba(59, 130, 246, 0.4)'
             }}
           >
-            🎬 Procházet Filmy
+            {t('landing.browse_movies')}
           </Link>
 
           <Link
@@ -77,23 +77,23 @@ export default function LandingPage() {
               border: '1px solid rgba(255, 255, 255, 0.2)'
             }}
           >
-            📺 Procházet Seriály
+            {t('landing.browse_series')}
           </Link>
         </div>
 
         {/* FEATURE PILLS BADGES */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <span className="glass-pill" style={{ padding: '0.4rem 0.9rem', fontSize: '0.825rem', fontWeight: 600 }}>
-            🧩 Podpora Stremio & Nuvio doplňků
+            {t('landing.badge_addons')}
           </span>
           <span className="glass-pill" style={{ padding: '0.4rem 0.9rem', fontSize: '0.825rem', fontWeight: 600, borderColor: 'rgba(234, 179, 8, 0.3)', color: '#fbbf24' }}>
-            ⚡ TorBox Debrid Akcelerace
+            {t('landing.badge_debrid')}
           </span>
           <span className="glass-pill" style={{ padding: '0.4rem 0.9rem', fontSize: '0.825rem', fontWeight: 600 }}>
-            🍿 PotPlayer, VLC, MPV & Web Player
+            {t('landing.badge_players')}
           </span>
           <span className="glass-pill" style={{ padding: '0.4rem 0.9rem', fontSize: '0.825rem', fontWeight: 600 }}>
-            🌐 Česky & English
+            {t('landing.badge_lang')}
           </span>
         </div>
       </section>
@@ -106,10 +106,10 @@ export default function LandingPage() {
             🧩
           </div>
           <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '0.6rem', color: '#fff' }}>
-            Multi-Plugin Engine
+            {t('landing.feat1_title')}
           </h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }}>
-            Připojte jakýkoliv Stremio Addon (Torrentio, Cinemeta) i spouštěcí Nuvio JS skripty (4KHDHub, HellSpy, SkTorrent) a prohledávejte všechny zdroje současně.
+            {t('landing.feat1_desc')}
           </p>
         </div>
 
@@ -119,10 +119,10 @@ export default function LandingPage() {
             ⚡
           </div>
           <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '0.6rem', color: '#fff' }}>
-            Debrid & TorBox Kešování
+            {t('landing.feat2_title')}
           </h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }}>
-            Automatická detekce cachenutých torrentů. Kliknutím na tlačítko ⚡ přidejte jakýkoliv torrent okamžitě na váš TorBox účet pro přehrání bez čekání.
+            {t('landing.feat2_desc')}
           </p>
         </div>
 
@@ -132,10 +132,10 @@ export default function LandingPage() {
             🍿
           </div>
           <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '0.6rem', color: '#fff' }}>
-            Váš Oblíbený Přehrávač
+            {t('landing.feat3_title')}
           </h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }}>
-            Přehrávejte přímo v prohlížeči nebo otevírejte videa jedním kliknutím v desktopovém prehravaci PotPlayer, VLC, MPV nebo Infuse.
+            {t('landing.feat3_desc')}
           </p>
         </div>
       </section>
@@ -143,17 +143,17 @@ export default function LandingPage() {
       {/* QUICK FOOTER CTA */}
       <section style={{ textAlign: 'center', marginTop: '4rem', padding: '2.5rem 2rem', borderRadius: '24px', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
         <h2 style={{ fontSize: '1.8rem', fontWeight: 800, marginBottom: '0.75rem', color: '#fff' }}>
-          Připraveni začít?
+          {t('landing.cta_title')}
         </h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '1rem' }}>
-          Otevřete katalog a objevujte nejnovější a nejpopulárnější tituly.
+          {t('landing.cta_subtitle')}
         </p>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
           <Link href="/?view=catalog&type=movie" className="btn btn-primary" style={{ padding: '0.75rem 1.75rem', borderRadius: '9999px' }}>
-            🚀 Otevřít Katalog
+            {t('landing.open_catalog')}
           </Link>
           <Link href="/settings" className="btn btn-secondary" style={{ padding: '0.75rem 1.75rem', borderRadius: '9999px' }}>
-            ⚙️ Nastavení Doplňků
+            {t('landing.settings_addons')}
           </Link>
         </div>
       </section>
