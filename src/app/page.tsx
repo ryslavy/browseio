@@ -11,6 +11,7 @@ import { MovieGrid } from '@/components/catalog/MovieGrid';
 import { t, i18nEventTarget } from '@/lib/i18n';
 import MovieDetailsClient from '@/components/MovieDetailsClient';
 import SettingsPage from '@/app/settings/page';
+import LandingPage from '@/components/LandingPage';
 
 const MOVIE_GENRES = [
   'top',
@@ -319,7 +320,7 @@ function CatalogContent() {
  * instantly switches view without requiring full page reloads or popstate events.
  */
 function useCurrentView() {
-  const [view, setView] = useState<{ type: 'catalog' | 'settings' | 'movie'; mediaType?: string; id?: string }>({ type: 'catalog' });
+  const [view, setView] = useState<{ type: 'landing' | 'catalog' | 'settings' | 'movie'; mediaType?: string; id?: string }>({ type: 'landing' });
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -360,8 +361,14 @@ function useCurrentView() {
         return;
       }
 
-      // 5. Default Catalog View
-      setView({ type: 'catalog' });
+      // 5. Explicit Catalog View (?view=catalog or ?type=... or ?genre=... or ?q=... or ?sort=...)
+      if (sp.get('view') === 'catalog' || sp.has('type') || sp.has('genre') || sp.has('q') || sp.has('sort')) {
+        setView({ type: 'catalog' });
+        return;
+      }
+
+      // 6. Default Landing Page View (when visiting root URL /)
+      setView({ type: 'landing' });
     }
 
     updateView();
@@ -380,6 +387,10 @@ function useCurrentView() {
 
 function HomeContent() {
   const view = useCurrentView();
+
+  if (view.type === 'landing') {
+    return <LandingPage />;
+  }
 
   if (view.type === 'settings') {
     return <SettingsPage />;
