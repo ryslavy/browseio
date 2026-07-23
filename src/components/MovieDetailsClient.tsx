@@ -988,21 +988,11 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
       {/* VIDEO PLAYER MODAL */}
       {playingUrl && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '1.5rem', backdropFilter: 'blur(10px)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2rem', fontWeight: 700 }}>{playingTitle}</h3>
-            <button 
-              onClick={() => setPlayingUrl(null)} 
-              className="btn btn-secondary"
-              style={{ fontSize: '1rem', padding: '0.4rem 1rem', borderRadius: '8px' }}
-            >
-              ✕ Zavřít přehrávač
-            </button>
-          </div>
-          <div style={{ flex: 1, position: 'relative', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
-            <VideoPlayer options={{ autoplay: true, controls: true, responsive: true, fill: true, sources: [{ src: playingUrl }] }} />
-          </div>
-        </div>
+        <VideoPlayer 
+          src={playingUrl} 
+          title={playingTitle} 
+          onClose={() => setPlayingUrl(null)} 
+        />
       )}
     </div>
   );

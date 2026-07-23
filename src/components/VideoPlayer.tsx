@@ -1,145 +1,106 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
-import videojs from 'video.js';
-import 'video.js/dist/video-js.css';
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface VideoPlayerProps {
-  options: {
-    autoplay?: boolean;
-    controls?: boolean;
-    responsive?: boolean;
-    fluid?: boolean;
-    fill?: boolean;
-    playbackRates?: number[];
-    sources: { src: string; type?: string }[];
-    [key: string]: any;
-  };
-  onReady?: (player: any) => void;
+  options?: any;
+  src?: string;
+  title?: string;
+  onClose?: () => void;
 }
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ options, onReady }) => {
-  const videoNodeRef = useRef<HTMLVideoElement | null>(null);
-  const playerRef = useRef<any>(null);
-  const [hasError, setHasError] = useState(false);
+export const VideoPlayerModal: React.FC<VideoPlayerProps> = ({ options, src: propSrc, title, onClose }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const srcUrl = options.sources && options.sources[0]?.src ? options.sources[0].src : '';
+  const src = propSrc || (options && options.sources && options.sources[0]?.src ? options.sources[0].src : '');
 
   useEffect(() => {
-    if (!srcUrl || !videoNodeRef.current) return;
-
-    setHasError(false);
-
-    const isHls = srcUrl.includes('.m3u8');
-    const sourceType = options.sources[0]?.type || (isHls ? 'application/x-mpegURL' : undefined);
-
-    const sources = sourceType ? [{ src: srcUrl, type: sourceType }] : [{ src: srcUrl }];
-
-    if (!playerRef.current) {
-      const element = videoNodeRef.current;
-      try {
-        const player = playerRef.current = videojs(element, {
-          controls: true,
-          autoplay: true,
-          preload: 'auto',
-          responsive: true,
-          fluid: true,
-          ...options,
-          sources: sources,
-        }, () => {
-          if (onReady) onReady(player);
-        });
-
-        player.on('error', () => {
-          console.warn('Video.js error, falling back to native HTML5 video player');
-          setHasError(true);
-        });
-      } catch (err) {
-        console.error('Failed to initialize Video.js:', err);
-        setHasError(true);
-      }
-    } else {
-      const player = playerRef.current;
-      player.src(sources);
-      if (options.autoplay) {
-        player.play().catch(() => {});
-      }
-    }
-  }, [srcUrl]);
-
-  useEffect(() => {
-    return () => {
-      if (playerRef.current && !playerRef.current.isDisposed()) {
-        try {
-          playerRef.current.dispose();
-        } catch (e) {
-          // Ignore disposal errors on unmount
-        }
-        playerRef.current = null;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && onClose) {
+        onClose();
       }
     };
-  }, []);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
-  return (
-    <div data-vjs-player style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {hasError ? (
+  if (typeof window === 'undefined' || !document.body) return null;
+
+  const content = (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#000',
+        zIndex: 999999,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header Controls Bar */}
+      <div
+        style={{
+          padding: '0.85rem 1.5rem',
+          backgroundColor: 'rgba(15, 17, 23, 0.95)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: '1px solid rgba(255,255,255,0.1)',
+          zIndex: 10,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontSize: '1.2rem' }}>🎬</span>
+          <h3 style={{ margin: 0, color: '#fff', fontSize: '1.15rem', fontWeight: 700 }}>
+            {title || 'Přehrávač videa'}
+          </h3>
+        </div>
+
+        {onClose && (
+          <button
+            onClick={onClose}
+            style={{
+              fontSize: '0.875rem',
+              padding: '0.45rem 1.1rem',
+              borderRadius: '9999px',
+              backgroundColor: 'rgba(239, 68, 68, 0.85)',
+              color: '#fff',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: 'none',
+              transition: 'background-color 0.2s'
+            }}
+          >
+            ✕ Zavřít (ESC)
+          </button>
+        )}
+      </div>
+
+      {/* Main Fullscreen Video Viewport */}
+      <div style={{ flex: 1, width: '100%', height: 'calc(100vh - 60px)', backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <video
-          src={srcUrl}
+          ref={videoRef}
+          src={src}
           controls
           autoPlay
-          style={{ width: '100%', height: '100%', maxHeight: '100%', objectFit: 'contain', backgroundColor: '#000' }}
+          playsInline
+          style={{
+            width: '100%',
+            height: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            backgroundColor: '#000',
+          }}
         />
-      ) : (
-        <div style={{ width: '100%', height: '100%' }}>
-          <video ref={videoNodeRef} className="video-js vjs-big-play-centered vjs-premium-theme" playsInline />
-        </div>
-      )}
-      
-      <style dangerouslySetInnerHTML={{__html: `
-        .vjs-premium-theme {
-          width: 100% !important;
-          height: 100% !important;
-          font-family: 'Inter', sans-serif;
-          font-size: 16px !important;
-        }
-        
-        .vjs-premium-theme .vjs-big-play-button {
-          background-color: rgba(59, 130, 246, 0.9);
-          border: none;
-          border-radius: 50%;
-          width: 80px;
-          height: 80px;
-          line-height: 80px;
-          margin-top: -40px;
-          margin-left: -40px;
-          transition: all 0.3s ease;
-        }
-        
-        .vjs-premium-theme:hover .vjs-big-play-button {
-          background-color: rgb(59, 130, 246);
-          transform: scale(1.1);
-        }
-        
-        .vjs-premium-theme .vjs-control-bar {
-          background-color: rgba(0, 0, 0, 0.75);
-          height: 50px;
-          backdrop-filter: blur(10px);
-        }
-        
-        .vjs-premium-theme .vjs-play-progress {
-          background-color: rgb(59, 130, 246);
-        }
-        
-        .vjs-premium-theme .vjs-volume-level {
-          background-color: rgb(59, 130, 246);
-        }
-        
-        .vjs-premium-theme .vjs-slider {
-          background-color: rgba(255,255,255,0.2);
-        }
-      `}} />
+      </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 };
 
-export default VideoPlayer;
+export default VideoPlayerModal;
