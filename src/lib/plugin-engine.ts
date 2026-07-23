@@ -72,10 +72,27 @@ export function normalizeInfoHash(hashOrMagnet?: string): string {
 export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
   if (s.isTorBoxCached) return true;
 
-  // Title, name, subProvider or behaviorHints explicitly contains Debrid cached tags (e.g. [TB+], [RD+], [TorBox])
+  // 1. Direct HTTP/HTTPS stream link from a Debrid service/proxy (not magnet and not .torrent file)
+  if (s.url && /^https?:\/\//i.test(s.url) && !s.url.toLowerCase().endsWith('.torrent')) {
+    const urlLower = s.url.toLowerCase();
+    if (
+      urlLower.includes('real-debrid') ||
+      urlLower.includes('torbox') ||
+      urlLower.includes('alldebrid') ||
+      urlLower.includes('debrid-link') ||
+      urlLower.includes('premiumize') ||
+      urlLower.includes('/debrid/')
+    ) {
+      return true;
+    }
+  }
+
+  // 2. Title, name, subProvider, pluginName or behaviorHints contains Debrid indicators
   const combined = `${s.name || ''} ${s.title || ''} ${s.subProvider || ''} ${s.pluginName || ''}`;
+  
   if (
-    /\[?(RD\+|TB\+|AD\+|DL\+|PM\+)\]?/i.test(combined) ||
+    /\[?(RD\+?|TB\+?|AD\+?|DL\+?|PM\+?)\]?/i.test(combined) ||
+    /⚡|debrid|real-debrid|torbox|alldebrid|cached/i.test(combined) ||
     s.behaviorHints?.cached === true
   ) {
     return true;
@@ -138,8 +155,9 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
   }
 
   corsProxies.push(
-    (u: string) => `https://cors.eu.org/${u}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    (u: string) => `https://cors.eu.org/${u}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
   );
 
@@ -147,7 +165,7 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     try {
       const proxiedUrl = proxyFn(urlStr);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       const res = await fetch(proxiedUrl, {
         ...init,
@@ -159,6 +177,17 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     } catch (e) {
       // Fast fail, try next proxy
     }
+  }
+
+  // Direct fetch fallback if all proxies failed or allowed CORS
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(input, { ...init, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) return res;
+  } catch (e) {
+    // Ignore
   }
 
   throw new Error(`CORS_FETCH_FAILED: ${urlStr}`);
