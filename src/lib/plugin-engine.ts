@@ -384,6 +384,7 @@ const stremioFetch = async (url: string): Promise<Response> => {
   }
 
   corsProxies.push(
+    (u: string) => `/api/proxy?url=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://cors.eu.org/${u}`

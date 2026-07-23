@@ -1,14 +1,19 @@
 import type { NextConfig } from "next";
 
+const isStaticExport = process.env.STATIC_EXPORT === 'true';
 const isProd = process.env.NODE_ENV === 'production';
 
 const nextConfig: NextConfig = {
-  output: 'export',
-  trailingSlash: true,
+  ...(isStaticExport
+    ? {
+        output: 'export',
+        trailingSlash: true,
+        basePath: isProd ? '/browseio' : '',
+      }
+    : {}),
   images: {
-    unoptimized: true
+    unoptimized: true,
   },
-  basePath: isProd ? '/browseio' : '',
 };
 
 export default nextConfig;
