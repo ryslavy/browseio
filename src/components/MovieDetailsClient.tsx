@@ -301,7 +301,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
       if (res.success) {
         setCachedSuccessIdx(idx);
         // Mark source as cached in state
-        setSources(prev => prev.map((s, i) => i === idx ? { ...s, isTorBoxCached: true } : s));
+        setSources(prev => prev.map((s, i) => i === idx ? { ...s, isTorBoxCached: true, type: 'debrid' as const } : s));
         setTimeout(() => setCachedSuccessIdx(null), 4000);
       } else {
         alert(res.message || 'Nepodařilo se přidat torrent do TorBoxu.');
