@@ -26,21 +26,6 @@ export interface TorBoxCachedResponse {
  * Passes Authorization: Bearer header.
  */
 async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Promise<Response> {
-  const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
-  const corsProxies: ((u: string) => string)[] = [];
-
-  if (customProxy && customProxy.trim()) {
-    const cp = customProxy.trim();
-    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
-  }
-
-  // cors.eu.org supports POST & GET with Authorization headers for TorBox API
-  corsProxies.push(
-    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u: string) => `https://cors.eu.org/${u}`,
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
-  );
-
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string> || {})
   };
@@ -49,28 +34,44 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
+  // 1. Direct fetch first (api.torbox.app supports CORS natively)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(url, { ...init, headers, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) return res;
+  } catch (e) {
+    // Fallback to proxy
+  }
+
+  // 2. Vercel Edge API proxy + fallback proxies
+  const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
+  const corsProxies: ((u: string) => string)[] = [
+    (u: string) => `/api/proxy?url=${encodeURIComponent(u)}`
+  ];
+
+  if (customProxy && customProxy.trim()) {
+    const cp = customProxy.trim();
+    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
+  }
+
+  corsProxies.push(
+    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://cors.eu.org/${u}`
+  );
+
   for (const proxyFn of corsProxies) {
     try {
       const proxiedUrl = proxyFn(url);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(proxiedUrl, { ...init, headers, signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) return res;
     } catch (e) {
       // Try next proxy
     }
-  }
-
-  // Direct fetch fallback
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(url, { ...init, headers, signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (res.ok) return res;
-  } catch (e) {
-    console.warn(`[TorBox] Direct fetch failed for ${url.slice(0, 60)}...`);
   }
 
   throw new Error(`TORBOX_FETCH_FAILED: ${url}`);
