@@ -1,5 +1,6 @@
 // Universal Plugin & Addon Engine for BrowseIO
 // Supports Stremio Addons & Nuvio Executable JS Plugins with progressive loading & strict CORS fast-fail
+import * as cheerio from 'cheerio';
 
 export interface PluginManifest {
   id: string;
@@ -55,6 +56,14 @@ export function savePlugins(plugins: PluginManifest[]): void {
 }
 
 /**
+ * Polyfilled require helper for browser execution of Nuvio scrapers.
+ */
+const customRequire = (moduleName: string) => {
+  if (moduleName && moduleName.includes('cheerio')) return cheerio;
+  return {};
+};
+
+/**
  * Fetches a URL with CORS proxy fallback.
  * For Nuvio scrapers: uses proxies with 4s timeout.
  * Throws if all attempts fail.
@@ -76,6 +85,7 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
   }
 
   corsProxies.push(
+    (u: string) => `https://cors.eu.org/${u}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
   );
@@ -84,7 +94,7 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     try {
       const proxiedUrl = proxyFn(urlStr);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const res = await fetch(proxiedUrl, {
         ...init,
@@ -128,6 +138,7 @@ const stremioFetch = async (url: string): Promise<Response> => {
   }
 
   corsProxies.push(
+    (u: string) => `https://cors.eu.org/${u}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
   );
@@ -228,7 +239,7 @@ export async function fetchStreamsFromPlugin(
   const baseUrl = plugin.manifestUrl.replace('/manifest.json', '').replace(/\/$/, '');
 
   // ─── Handle Nuvio Executable JS Plugins ───
-  if (plugin.type === 'nuvio' || plugin.manifestUrl.includes('scrapelord')) {
+  if (plugin.type === 'nuvio' || plugin.manifestUrl.includes('scrapelord') || plugin.manifestUrl.includes('Nuvio')) {
     try {
       const mRes = await corsFetch(plugin.manifestUrl);
       if (!mRes.ok) return [];
@@ -250,20 +261,41 @@ export async function fetchStreamsFromPlugin(
             const mod: any = { exports: {} };
 
             const customGlobalThis = Object.create(globalThis, {
-              fetch: { value: corsFetch, writable: true, configurable: true }
+              fetch: { value: corsFetch, writable: true, configurable: true },
+              cheerio: { value: cheerio, writable: true, configurable: true },
+              require: { value: customRequire, writable: true, configurable: true }
             });
 
-            const runner = new Function('module', 'exports', 'globalThis', 'fetch', code);
-            runner(mod, mod.exports, customGlobalThis, corsFetch);
+            const runner = new Function('module', 'exports', 'globalThis', 'fetch', 'require', 'cheerio', code);
+            runner(mod, mod.exports, customGlobalThis, corsFetch, customRequire, cheerio);
 
-            if (typeof mod.exports.getStreams === 'function') {
-              const raw = await mod.exports.getStreams({
-                tmdbId: id,
-                mediaType: type === 'series' ? 'tv' : 'movie',
-                season: season,
-                episode: episode,
-                title: title
-              });
+            const getStreamsFn = mod.exports.getStreams || customGlobalThis.getStreams;
+
+            if (typeof getStreamsFn === 'function') {
+              const targetType = type === 'series' ? 'tv' : 'movie';
+              let raw: any = null;
+
+              // 1. Try positional arguments signature: (id, targetType, season, episode, title)
+              try {
+                raw = await getStreamsFn(id, targetType, season, episode, title);
+              } catch (e1) {
+                // Ignore positional error, try object signature
+              }
+
+              // 2. Fallback to object argument signature if positional returned nothing or failed
+              if (!Array.isArray(raw) || raw.length === 0) {
+                try {
+                  raw = await getStreamsFn({
+                    tmdbId: id,
+                    mediaType: targetType,
+                    season: season,
+                    episode: episode,
+                    title: title
+                  });
+                } catch (e2) {
+                  // Ignore
+                }
+              }
 
               if (Array.isArray(raw) && raw.length > 0) {
                 const scraperStreams: StreamSource[] = [];
