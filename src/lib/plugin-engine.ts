@@ -141,12 +141,27 @@ export function getHashFromSource(s: Partial<StreamSource>): string {
  */
 export function isDebridCachedStream(s: any): boolean {
   if (!s) return false;
-  if (s.isTorBoxCached) return true;
+  if (s.isTorBoxCached || s.isDebrid || s.cached) return true;
+  if (s.behaviorHints?.cached === true || s.behaviorHints?.isDebrid === true) return true;
 
   const urlStr = s.url || s.link || s.streamUrl;
+  const isHttpUrl = Boolean(urlStr && /^https?:\/\//i.test(urlStr) && !urlStr.toLowerCase().endsWith('.torrent'));
 
-  // 1. Direct HTTP/HTTPS stream link from a Debrid resolver (Real-Debrid, TorBox, AllDebrid, Premiumize, etc.)
-  if (urlStr && /^https?:\/\//i.test(urlStr) && !urlStr.toLowerCase().endsWith('.torrent')) {
+  const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''} ${s.description || ''} ${s.rawName || ''} ${s.pluginName || ''}`;
+
+  // Exclude explicitly UNCACHED indicators (e.g. [RD-] or [RD ⏳] or "uncached")
+  const isExplicitlyUncached = /\[(RD|TB|AD|DL|PM|Debrid)-?\]\s*(uncached|non-cached|⏳|❌)/i.test(streamText) || /\b(uncached|non-cached)\b/i.test(streamText);
+  if (isExplicitlyUncached) {
+    return false;
+  }
+
+  // 1. If an HTTP URL is provided alongside an infoHash or magnet in a torrent addon stream, it has been resolved by Debrid
+  if (isHttpUrl && (s.infoHash || s.magnet || s.behaviorHints?.infoHash)) {
+    return true;
+  }
+
+  // 2. Direct HTTP/HTTPS stream link from a Debrid resolver domain/path
+  if (isHttpUrl) {
     const urlLower = urlStr.toLowerCase();
     if (
       urlLower.includes('real-debrid') ||
@@ -156,6 +171,8 @@ export function isDebridCachedStream(s: any): boolean {
       urlLower.includes('debrid-link') ||
       urlLower.includes('premiumize') ||
       urlLower.includes('pikpak') ||
+      urlLower.includes('offcloud') ||
+      urlLower.includes('easydebrid') ||
       urlLower.includes('/debrid/') ||
       urlLower.includes('/rd/') ||
       urlLower.includes('/tb/') ||
@@ -167,17 +184,14 @@ export function isDebridCachedStream(s: any): boolean {
     }
   }
 
-  // 2. Check stream text (subProvider, name, title, description, rawName) for Debrid status indicators
-  const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''} ${s.description || ''} ${s.rawName || ''}`;
-  
+  // 3. Check stream text for Debrid status indicators ([RD+], [RD ⚡], [TB+], [AD+], [PM+], [DL+], ⚡, etc.)
   if (
-    /\[(RD|TB|AD|DL|PM|PikPak|Debrid|RealDebrid|TorBox|AllDebrid|Premiumize)(\+|\s*⚡|\s*Download|\s*Cached)?\]/i.test(streamText) ||
+    /\[(RD|TB|AD|DL|PM|PikPak|Debrid|RealDebrid|TorBox|AllDebrid|Premiumize|Offcloud|EasyDebrid)(\+|\s*⚡|\s*Download|\s*Cached)?\]/i.test(streamText) ||
     /\[(RD|TB|AD|DL|PM)\s*(\+|\b|⚡)\]/i.test(streamText) ||
     /\b(RD\+|TB\+|AD\+|DL\+|PM\+)\b/i.test(streamText) ||
     /\b(RD|TB|AD|DL|PM)\s*⚡/i.test(streamText) ||
     /⚡\s*(RD|TB|AD|Debrid|TorBox|RealDebrid)/i.test(streamText) ||
-    s.behaviorHints?.cached === true ||
-    s.behaviorHints?.isDebrid === true
+    /⚡\s*(Instant|Cached|Debrid)/i.test(streamText)
   ) {
     return true;
   }
@@ -349,18 +363,18 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
  * Has an 8s timeout since Stremio responses can be large.
  */
 const stremioFetch = async (url: string): Promise<Response> => {
-  // 1. Try direct fetch first (most Stremio addons support CORS natively)
+  // 1. Try fast direct fetch first (Stremio addons support CORS natively) with 2.5s timeout
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (res.ok) return res;
   } catch (e) {
-    console.warn(`[Stremio] Direct fetch failed for ${url.slice(0, 60)}..., trying CORS proxies`);
+    // Fast fail direct fetch, try proxies immediately
   }
 
-  // 2. Fallback to CORS proxies with longer timeout
+  // 2. Fallback to CORS proxies with fast timeouts
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
   const corsProxies: ((u: string) => string)[] = [];
 
@@ -370,16 +384,16 @@ const stremioFetch = async (url: string): Promise<Response> => {
   }
 
   corsProxies.push(
-    (u: string) => `https://cors.eu.org/${u}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://cors.eu.org/${u}`
   );
 
   for (const proxyFn of corsProxies) {
     try {
       const proxiedUrl = proxyFn(url);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       const res = await fetch(proxiedUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) return res;
