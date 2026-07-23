@@ -1,0 +1,57 @@
+{
+  "name": "SkTorrent & Hellspy",
+  "version": "1.3.0",
+  "scrapers": [
+    {
+      "id": "sktorrent",
+      "name": "SkTorrent",
+      "description": "CZ/SK torrenty z sktorrent.eu - filmy a serialy. Plně kompatibilní s nativním debrid/TorBox resolvem v Nuviu.",
+      "version": "1.1.0",
+      "author": "SkTorrent Plugin",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/sktorrent.js",
+      "enabled": true,
+      "formats": ["mkv", "mp4", "avi"],
+      "logo": "https://www.google.com/s2/favicons?domain=sktorrent.eu&sz=128",
+      "contentLanguage": ["cs", "sk"],
+      "supportsExternalPlayer": true,
+      "hasSettings": true,
+      "debrid": {
+        "premiumize": true,
+        "realdebrid": true,
+        "allDebrid": true,
+        "torbox": true
+      }
+    },
+    {
+      "id": "hellspy",
+      "name": "Hellspy",
+      "description": "Bezplatné přímé přehrávání a stahování videí z hellspy.to. Nevyžaduje debrid ani placený účet.",
+      "version": "1.0.0",
+      "author": "SkTorrent Plugin",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/hellspy.js",
+      "enabled": true,
+      "formats": ["mp4", "mkv", "avi"],
+      "logo": "https://www.google.com/s2/favicons?domain=hellspy.to&sz=128",
+      "contentLanguage": ["cs", "sk"],
+      "supportsExternalPlayer": true,
+      "hasSettings": false
+    },
+    {
+      "id": "sktonline",
+      "name": "SKTonline",
+      "description": "Bezplatné přímé online přehrávání videí z online.sktorrent.eu. Nevyžaduje debrid ani stahování.",
+      "version": "1.0.0",
+      "author": "SkTorrent Plugin",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/sktonline.js",
+      "enabled": true,
+      "formats": ["mp4"],
+      "logo": "https://www.google.com/s2/favicons?domain=online.sktorrent.eu&sz=128",
+      "contentLanguage": ["cs", "sk"],
+      "supportsExternalPlayer": true,
+      "hasSettings": false
+    }
+  ]
+}

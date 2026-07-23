@@ -316,7 +316,8 @@ export async function fetchStreamsFromPlugin(
             const customGlobalThis = Object.create(globalThis, {
               fetch: { value: corsFetch, writable: true, configurable: true },
               cheerio: { value: cheerio, writable: true, configurable: true },
-              require: { value: customRequire, writable: true, configurable: true }
+              require: { value: customRequire, writable: true, configurable: true },
+              TMDB_API_KEY: { value: '4219e299c89411838049ab0dab19ebd5', writable: true, configurable: true }
             });
 
             const runner = new Function('module', 'exports', 'globalThis', 'fetch', 'require', 'cheerio', code);
@@ -328,23 +329,23 @@ export async function fetchStreamsFromPlugin(
               const targetType = type === 'series' ? 'tv' : 'movie';
               let raw: any = null;
 
-              // 1. Try positional arguments signature: (id, targetType, season, episode, title)
+              // 1. Try object argument signature first (allows scrapers to skip redundant title resolution)
               try {
-                raw = await getStreamsFn(id, targetType, season, episode, title);
+                raw = await getStreamsFn({
+                  tmdbId: id,
+                  mediaType: targetType,
+                  season: season,
+                  episode: episode,
+                  title: title
+                });
               } catch (e1) {
-                // Ignore positional error, try object signature
+                // Ignore object error, try positional signature
               }
 
-              // 2. Fallback to object argument signature if positional returned nothing or failed
+              // 2. Fallback to positional arguments signature: (id, targetType, season, episode, title)
               if (!Array.isArray(raw) || raw.length === 0) {
                 try {
-                  raw = await getStreamsFn({
-                    tmdbId: id,
-                    mediaType: targetType,
-                    season: season,
-                    episode: episode,
-                    title: title
-                  });
+                  raw = await getStreamsFn(id, targetType, season, episode, title);
                 } catch (e2) {
                   // Ignore
                 }
