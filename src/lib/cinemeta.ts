@@ -82,11 +82,13 @@ export async function getCatalog(type: 'movie' | 'series', category: string = 't
 export async function searchCinemeta(query: string, type: 'movie' | 'series' = 'movie'): Promise<MetaItem[]> {
   try {
     const tmdbType = type === 'series' ? 'tv' : 'movie';
+    const lang = getCurrentLanguage();
+    const tmdbLang = lang === 'cs' ? 'cs-CZ' : 'en-US';
     
-    // Single parallel round-trip for Cinemeta search + TMDB Czech search
+    // Single parallel round-trip for Cinemeta search + TMDB search
     const [cinemetaRes, tmdbRes] = await Promise.allSettled([
       fetch(`https://v3-cinemeta.strem.io/catalog/${type}/top/search=${encodeURIComponent(query)}.json`).then(r => r.json()),
-      fetch(`https://api.themoviedb.org/3/search/${tmdbType}?api_key=${TMDB_API_KEY}&language=cs-CZ&query=${encodeURIComponent(query)}`).then(r => r.json())
+      fetch(`https://api.themoviedb.org/3/search/${tmdbType}?api_key=${TMDB_API_KEY}&language=${tmdbLang}&query=${encodeURIComponent(query)}`).then(r => r.json())
     ]);
 
     const cinemetaMetas: MetaItem[] = cinemetaRes.status === 'fulfilled' && cinemetaRes.value?.metas ? cinemetaRes.value.metas : [];

@@ -43,6 +43,17 @@ export function FilterBar({
     setInputVal(searchQuery);
   }
 
+  // Live debounced search effect (350ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmed = inputVal.trim();
+      if (trimmed !== searchQuery) {
+        onSearchSubmit(trimmed);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [inputVal, searchQuery, onSearchSubmit]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSearchSubmit(inputVal.trim());

@@ -47,7 +47,7 @@ export function filterCatalogItems(items: MetaItem[], options: FilterOptions): M
 
   return items.filter(item => {
     // Media type filter
-    if (options.type && item.type !== options.type) {
+    if (options.type && item.type && item.type !== options.type) {
       return false;
     }
 
