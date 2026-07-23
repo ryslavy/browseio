@@ -44,12 +44,12 @@ export default function Navbar() {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-        <Link href="/" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+        <Link href="/?type=movie" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
           <span style={{ color: 'var(--accent-color)', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Browse</span>IO
         </Link>
 
         <nav style={{ display: 'flex', gap: '1rem' }}>
-          <Link href="/" style={{ color: 'var(--text-secondary)', fontWeight: 500, textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.color = '#fff'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}>
+          <Link href="/?type=movie" style={{ color: 'var(--text-secondary)', fontWeight: 500, textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.color = '#fff'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}>
             {t('nav.home')}
           </Link>
         </nav>

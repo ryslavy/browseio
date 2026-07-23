@@ -536,7 +536,7 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
 
   return (
     <div className="fade-in">
-      <Link href={type === 'series' ? '/?type=series' : '/'} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', textDecoration: 'none', fontWeight: 500 }}>
+      <Link href={type === 'series' ? '/?type=series' : '/?type=movie'} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', textDecoration: 'none', fontWeight: 500 }}>
         {t('details.back')}
       </Link>
 

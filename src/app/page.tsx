@@ -101,7 +101,6 @@ function CatalogContent() {
           val === undefined ||
           val === '' ||
           (key === 'genre' && val === 'top') ||
-          (key === 'type' && val === 'movie') ||
           (key === 'sort' && val === 'popularity')
         ) {
           params.delete(key);
