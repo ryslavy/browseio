@@ -72,7 +72,7 @@ export function normalizeInfoHash(hashOrMagnet?: string): string {
 export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
   if (s.isTorBoxCached) return true;
 
-  // 1. Direct HTTP/HTTPS stream link from a Debrid service/proxy (not magnet and not .torrent file)
+  // 1. Direct HTTP/HTTPS stream link from a Debrid resolver (e.g. RealDebrid, TorBox API, AllDebrid)
   if (s.url && /^https?:\/\//i.test(s.url) && !s.url.toLowerCase().endsWith('.torrent')) {
     const urlLower = s.url.toLowerCase();
     if (
@@ -87,12 +87,13 @@ export function isDebridCachedStream(s: Partial<StreamSource>): boolean {
     }
   }
 
-  // 2. Title, name, subProvider, pluginName or behaviorHints contains Debrid indicators
-  const combined = `${s.name || ''} ${s.title || ''} ${s.subProvider || ''} ${s.pluginName || ''}`;
+  // 2. Check ONLY the specific stream's title and name (do NOT check global plugin name or plugin description)
+  const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''}`;
   
   if (
-    /\[?(RD\+?|TB\+?|AD\+?|DL\+?|PM\+?)\]?/i.test(combined) ||
-    /⚡|debrid|real-debrid|torbox|alldebrid|cached/i.test(combined) ||
+    /\[(RD\+?|TB\+?|AD\+?|DL\+?|PM\+?)\]/i.test(streamText) ||
+    /\b(RD\+|TB\+|AD\+|DL\+|PM\+)\b/i.test(streamText) ||
+    /⚡\s*(RD|TB|AD|Debrid|TorBox|RealDebrid)/i.test(streamText) ||
     s.behaviorHints?.cached === true
   ) {
     return true;
