@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { t, i18nEventTarget } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 
 interface FilterBarProps {
   currentGenre: string;
@@ -9,7 +9,6 @@ interface FilterBarProps {
   searchQuery: string;
   onGenreChange: (genre: string) => void;
   onSearchSubmit: (query: string) => void;
-  type: 'movie' | 'series';
   loading?: boolean;
 }
 
@@ -19,24 +18,11 @@ export function FilterBar({
   searchQuery,
   onGenreChange,
   onSearchSubmit,
-  type,
   loading = false,
 }: FilterBarProps) {
+  const { t } = useI18n();
   const [inputVal, setInputVal] = useState(searchQuery);
   const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
-  const [, setLangTick] = useState(0);
-
-  useEffect(() => {
-    const handleLangChange = () => setLangTick(t => t + 1);
-    if (i18nEventTarget) {
-      i18nEventTarget.addEventListener('languageChange', handleLangChange);
-    }
-    return () => {
-      if (i18nEventTarget) {
-        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
-      }
-    };
-  }, []);
 
   if (prevSearchQuery !== searchQuery) {
     setPrevSearchQuery(searchQuery);

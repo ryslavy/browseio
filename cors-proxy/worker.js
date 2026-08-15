@@ -35,8 +35,8 @@ function getCorsHeaders(request) {
   };
 }
 
-export default {
-  async fetch(request, env, ctx) {
+const worker = {
+  async fetch(request) {
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -142,3 +142,5 @@ export default {
     }
   },
 };
+
+export default worker;

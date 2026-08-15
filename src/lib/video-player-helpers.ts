@@ -131,3 +131,97 @@ export function createVideoPlayerFallbackState(
     retryCount: 0,
   };
 }
+
+export interface NormalizedSubtitle {
+  url: string;
+  label: string;
+  lang: string;
+  default?: boolean;
+}
+
+/**
+ * Converts SubRip (.srt) subtitle format string into WebVTT format.
+ */
+export function convertSrtToVtt(srt: string): string {
+  if (!srt) return 'WEBVTT\n\n';
+  let vtt = srt.replace(/\r\n|\r/g, '\n').trim();
+  // Replace comma decimal separators in timestamps 00:00:20,000 --> 00:00:20.000
+  vtt = vtt.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+  if (!vtt.startsWith('WEBVTT')) {
+    vtt = `WEBVTT\n\n${vtt}`;
+  }
+  return vtt;
+}
+
+/**
+ * Normalizes subtitle objects from various formats (Stremio / Nuvio / Web) into standard structure.
+ */
+export function normalizeSubtitles(
+  rawSubtitles?: Array<{
+    url?: string;
+    src?: string;
+    lang?: string;
+    srclang?: string;
+    label?: string;
+    name?: string;
+    id?: string;
+    default?: boolean;
+  }>
+): NormalizedSubtitle[] {
+  if (!rawSubtitles || !Array.isArray(rawSubtitles)) return [];
+
+  const results: NormalizedSubtitle[] = [];
+  const seenUrls = new Set<string>();
+
+  rawSubtitles.forEach((s, idx) => {
+    const url = s.url || s.src;
+    if (!url || seenUrls.has(url)) return;
+    seenUrls.add(url);
+
+    const lang = s.lang || s.srclang || (s.id && s.id.length <= 3 ? s.id : 'und');
+    const label = s.label || s.name || `${lang.toUpperCase()} Subtitle ${idx + 1}`;
+
+    results.push({
+      url,
+      label,
+      lang,
+      default: Boolean(s.default)
+    });
+  });
+
+  return results;
+}
+
+export type DubbingLanguage = 'cz' | 'sk' | 'dual' | 'en' | 'other';
+
+/**
+ * Detects dubbing / audio language from stream title, filename, or provider description.
+ */
+export function detectStreamDubbing(text?: string | null): DubbingLanguage {
+  if (!text || typeof text !== 'string') return 'other';
+  const lower = text.toLowerCase();
+
+  // Multi / Dual audio (CZ + EN, etc.)
+  if (/(\bdual\b|\bmulti\b|\bcz\/sk\b|\bcz-sk\b|\bdual-audio\b|\bmulti-audio\b|dual\s*audio)/i.test(lower)) {
+    return 'dual';
+  }
+
+  // Czech Dubbing
+  if (/(\bcz\b|\bczdab\b|\bcz_dab\b|\bcesky\b|\bčesky\b|\bcz dabing\b|dabing cz|\bcz-dab\b|\bcz\+en\b|\bcesk[ya]\b)/i.test(lower)) {
+    return 'cz';
+  }
+
+  // Slovak Dubbing
+  if (/(\bsk\b|\bskdab\b|\bsk_dab\b|\bslovensky\b|\bsk dabing\b|dabing sk|\bsk-dab\b|\bslovencina\b)/i.test(lower)) {
+    return 'sk';
+  }
+
+  // English / Original
+  if (/(\ben\b|\beng\b|\benglish\b|\boriginal\b|\beng-sub\b|\beng-audio\b)/i.test(lower)) {
+    return 'en';
+  }
+
+  return 'other';
+}
+
+

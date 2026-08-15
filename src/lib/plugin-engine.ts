@@ -2,6 +2,66 @@
 // Supports Stremio Addons & Nuvio Executable JS Plugins with progressive loading & strict CORS fast-fail
 import * as cheerio from 'cheerio';
 
+export interface SubtitleTrack {
+  id?: string;
+  url: string;
+  lang?: string;
+  label?: string;
+}
+
+export interface BehaviorHints {
+  proxyHeaders?: {
+    request?: Record<string, string>;
+    response?: Record<string, string>;
+    [key: string]: unknown;
+  };
+  notSupported?: boolean;
+  fileName?: string;
+  videoHash?: string;
+  bingeGroup?: string;
+  infoHash?: string;
+  cached?: boolean;
+  isDebrid?: boolean;
+  fileIdx?: number;
+  [key: string]: unknown;
+}
+
+export interface StreamSource {
+  name: string;
+  pluginId?: string;
+  pluginName?: string;
+  subProvider?: string;
+  title: string;
+  description?: string;
+  url?: string | null;
+  link?: string;
+  streamUrl?: string;
+  magnet?: string;
+  infoHash?: string;
+  fileIdx?: number;
+  type?: 'web' | 'debrid' | 'torrent';
+  size?: string;
+  seeders?: number;
+  isTorBoxCached?: boolean;
+  isDebrid?: boolean;
+  cached?: boolean;
+  headers?: Record<string, string>;
+  subtitles?: SubtitleTrack[];
+  behaviorHints?: BehaviorHints;
+  capabilities?: {
+    supportsDebrid?: boolean;
+    isWebOnly?: boolean;
+  };
+}
+
+export interface NuvioScraperEntry {
+  id: string;
+  name: string;
+  filename: string;
+  description?: string;
+  enabled?: boolean;
+}
+
 export interface PluginManifest {
   id: string;
   name: string;
@@ -12,45 +72,35 @@ export interface PluginManifest {
   manifestUrl: string;
   enabled: boolean;
   isBuiltIn?: boolean;
+  scrapers?: NuvioScraperEntry[];
+  resources?: (string | { name: string; types?: string[]; idPrefixes?: string[] })[];
 }
 
-export interface BehaviorHints {
-  proxyHeaders?: {
-    request?: Record<string, string>;
-    response?: Record<string, string>;
-    [key: string]: any;
-  };
-  notSupported?: boolean;
-  fileName?: string;
-  videoHash?: string;
-  bingeGroup?: string;
-  infoHash?: string;
-  cached?: boolean;
-  fileIdx?: number;
-  [key: string]: any;
-}
-
-export interface StreamSource {
-  name: string;
-  pluginId?: string;
-  pluginName?: string;
-  subProvider?: string;
-  title: string;
+export interface StremioRawStream {
+  name?: string;
+  title?: string;
+  description?: string;
   url?: string | null;
-  magnet?: string;
-  infoHash?: string;
-  fileIdx?: number;
-  type?: 'web' | 'debrid' | 'torrent';
-  size?: string;
+  link?: string | null;
+  streamUrl?: string | null;
+  downloadUrl?: string | null;
+  file?: string | null;
+  magnet?: string | null;
+  infoHash?: string | null;
+  hash?: string | null;
+  btih?: string | null;
+  fileIdx?: number | string;
+  file_index?: number | string;
+  fileIndex?: number | string;
   seeders?: number;
+  size?: string;
   isTorBoxCached?: boolean;
+  isDebrid?: boolean;
+  cached?: boolean;
   headers?: Record<string, string>;
-  subtitles?: any[];
+  subtitles?: SubtitleTrack[];
   behaviorHints?: BehaviorHints;
-  capabilities?: {
-    supportsDebrid?: boolean;
-    isWebOnly?: boolean;
-  };
+  [key: string]: unknown;
 }
 
 export function base32ToHex(base32: string): string {
@@ -74,7 +124,7 @@ export function base32ToHex(base32: string): string {
  * Normalizes a torrent infoHash or magnet string into a clean 40-character lower-case hex hash.
  * DO NOT extract 40-char hex strings from standard web HTTP stream URLs (e.g. Hellspy direct URLs).
  */
-export function normalizeInfoHash(hashOrMagnet?: string): string {
+export function normalizeInfoHash(hashOrMagnet?: string | null): string {
   if (!hashOrMagnet) return '';
   const clean = hashOrMagnet.trim();
   if (!clean) return '';
@@ -147,7 +197,22 @@ export function getHashFromSource(s: Partial<StreamSource>): string {
 /**
  * Checks if a stream is a resolved Debrid HTTP stream (Real-Debrid, TorBox, AllDebrid, etc.)
  */
-export function isDebridCachedStream(s: any): boolean {
+export function isDebridCachedStream(s: {
+  isTorBoxCached?: boolean;
+  isDebrid?: boolean;
+  cached?: boolean;
+  behaviorHints?: { cached?: boolean; isDebrid?: boolean; infoHash?: string };
+  url?: string | null;
+  link?: string | null;
+  streamUrl?: string | null;
+  subProvider?: string | null;
+  name?: string | null;
+  title?: string | null;
+  description?: string | null;
+  pluginName?: string | null;
+  infoHash?: string | null;
+  magnet?: string | null;
+}): boolean {
   if (!s) return false;
   if (s.isTorBoxCached || s.isDebrid || s.cached) return true;
   if (s.behaviorHints?.cached === true || s.behaviorHints?.isDebrid === true) return true;
@@ -155,7 +220,7 @@ export function isDebridCachedStream(s: any): boolean {
   const urlStr = s.url || s.link || s.streamUrl;
   const isHttpUrl = Boolean(urlStr && /^https?:\/\//i.test(urlStr) && !urlStr.toLowerCase().endsWith('.torrent'));
 
-  const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''} ${s.description || ''} ${s.rawName || ''} ${s.pluginName || ''}`;
+  const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''} ${s.description || ''} ${s.pluginName || ''}`;
 
   // Exclude explicitly UNCACHED indicators (e.g. [RD-] or [RD ⏳] or "uncached")
   const isExplicitlyUncached = /\[(RD|TB|AD|DL|PM|Debrid)-?\]\s*(uncached|non-cached|⏳|❌)/i.test(streamText) || /\b(uncached|non-cached)\b/i.test(streamText);
@@ -169,7 +234,7 @@ export function isDebridCachedStream(s: any): boolean {
   }
 
   // 2. Direct HTTP/HTTPS stream link from a Debrid resolver domain/path
-  if (isHttpUrl) {
+  if (isHttpUrl && urlStr) {
     const urlLower = urlStr.toLowerCase();
     if (
       urlLower.includes('real-debrid') ||
@@ -214,12 +279,22 @@ export function isDebridCachedStream(s: any): boolean {
  * - 'torrent': P2P Torrents containing explicit infoHash, magnet link, or Stremio torrent properties
  */
 export function classifyStream(s: Partial<StreamSource>): 'web' | 'debrid' | 'torrent' {
-  if (s.capabilities?.isWebOnly) {
-    return 'web';
-  }
-
   if (isDebridCachedStream(s)) {
     return 'debrid';
+  }
+
+  // If stream provides a direct HTTP/HTTPS URL from a Debrid resolver addon (e.g. beamup.club, real-debrid, torbox, etc.)
+  if (s.url && /^https?:\/\//i.test(s.url) && !s.url.toLowerCase().endsWith('.torrent')) {
+    const streamText = `${s.subProvider || ''} ${s.name || ''} ${s.title || ''} ${s.description || ''} ${s.pluginName || ''}`;
+    const isDebridResolver = /torbox|real-debrid|realdebrid|alldebrid|premiumize|debrid|baby-beamup\.club|beamup/i.test(s.url) ||
+      /\[(RD|TB|AD|DL|PM|Debrid)/i.test(streamText);
+    if (isDebridResolver) {
+      return 'debrid';
+    }
+  }
+
+  if (s.capabilities?.isWebOnly) {
+    return 'web';
   }
 
   const hash = getHashFromSource(s);
@@ -239,7 +314,7 @@ export function classifyStream(s: Partial<StreamSource>): 'web' | 'debrid' | 'to
     return 'web';
   }
 
-  return 'web';
+  return 'torrent';
 }
 
 export function safeDecodeFileName(fileName?: string): string | undefined {
@@ -248,13 +323,18 @@ export function safeDecodeFileName(fileName?: string): string | undefined {
     if (fileName.includes('%')) {
       return decodeURIComponent(fileName);
     }
-  } catch (e) {
+  } catch {
     // Return original if URI malformed
   }
   return fileName;
 }
 
-export function extractFileIdx(s: any): number | undefined {
+export function extractFileIdx(s: {
+  fileIdx?: number | string;
+  file_index?: number | string;
+  fileIndex?: number | string;
+  behaviorHints?: { fileIdx?: number | string };
+}): number | undefined {
   if (typeof s.fileIdx === 'number') return s.fileIdx;
   if (typeof s.fileIdx === 'string' && !isNaN(parseInt(s.fileIdx, 10))) return parseInt(s.fileIdx, 10);
   if (typeof s.file_index === 'number') return s.file_index;
@@ -316,28 +396,29 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     const proxiedUrl = cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(urlStr)}` : `${cp}/${urlStr}`;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(proxiedUrl, { ...init, signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) return res;
-    } catch (e) {
-      // Ignore, fallback
+    } catch {
+      // Fallback to internal universal proxy
     }
   }
 
-  // 2. Direct fetch attempt first (3.5s timeout) — works for sktorrent.eu, hellspy, etc.
+  // 2. Direct fetch attempt (fast 1.5s check - if server allows CORS, browser uses direct connection)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
     const res = await fetch(input, { ...init, signal: controller.signal });
     clearTimeout(timeoutId);
     if (res.ok) return res;
-  } catch (e) {
-    // Direct fetch restricted by CORS or timed out, fallback to proxy list
+  } catch {
+    // Direct fetch failed (CORS or offline), proceed to universal proxy
   }
 
-  // 3. Fallback CORS proxy list
+  // 3. Universal internal server proxy (/api/proxy) & public fallback proxies
   const corsProxies: ((u: string) => string)[] = [
+    (u: string) => `/api/proxy?url=${encodeURIComponent(u)}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://cors.eu.org/${u}`,
@@ -348,7 +429,7 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     try {
       const proxiedUrl = proxyFn(urlStr);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       const res = await fetch(proxiedUrl, {
         ...init,
@@ -357,32 +438,42 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
       clearTimeout(timeoutId);
 
       if (res.ok) return res;
-    } catch (e) {
+    } catch {
       // Fast fail, try next proxy
     }
   }
 
-  throw new Error(`CORS_FETCH_FAILED: ${urlStr}`);
+  // Graceful empty fallback instead of unhandled error
+  return new Response('', {
+    status: 200,
+    headers: { 'Content-Type': 'text/plain' }
+  });
 };
 
 /**
  * Smart fetch for Stremio addons: tries direct fetch first (Stremio addons
  * typically set Access-Control-Allow-Origin: *), then falls back to CORS proxies.
- * Has an 8s timeout since Stremio responses can be large.
+ * Has an extended timeout for community debrid/torrent addons.
  */
 const stremioFetch = async (url: string): Promise<Response> => {
-  // 1. Try fast direct fetch first (Stremio addons support CORS natively) with 2.5s timeout
+  // 1. Try fast direct fetch first (Stremio addons support CORS natively) with 3.5s timeout
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (res.ok) return res;
-  } catch (e) {
+    if (res.status === 404) {
+      return new Response(JSON.stringify({ streams: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  } catch {
     // Fast fail direct fetch, try proxies immediately
   }
 
-  // 2. Fallback to CORS proxies with fast timeouts
+  // 2. Fallback to CORS proxies with generous timeout for community addons
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
   const corsProxies: ((u: string) => string)[] = [];
 
@@ -402,17 +493,41 @@ const stremioFetch = async (url: string): Promise<Response> => {
     try {
       const proxiedUrl = proxyFn(url);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 14000);
       const res = await fetch(proxiedUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) return res;
-    } catch (e) {
+      if (res.status === 404) {
+        // Return clean empty JSON response for 404
+        return new Response(JSON.stringify({ streams: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    } catch {
       // Try next proxy
     }
   }
 
-  throw new Error(`STREMIO_FETCH_FAILED: ${url}`);
+  // Graceful empty streams fallback
+  return new Response(JSON.stringify({ streams: [] }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
 };
+
+interface ParsedManifestRaw {
+  id?: string;
+  name?: string;
+  version?: string;
+  description?: string;
+  icon?: string;
+  logo?: string;
+  nuvio?: boolean;
+  scrapers?: NuvioScraperEntry[];
+  pluginType?: string;
+  [key: string]: unknown;
+}
 
 export async function installPluginFromUrl(urlInput: string): Promise<PluginManifest> {
   let cleanUrl = urlInput.trim();
@@ -433,11 +548,11 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
   }
 
   const text = await res.text();
-  let manifest: any = {};
+  let manifest: ParsedManifestRaw = {};
 
   try {
     manifest = JSON.parse(text);
-  } catch (e) {
+  } catch {
     try {
       let fixedText = text.trim().replace(/,\s*$/, '');
       if (!fixedText.endsWith('}')) {
@@ -470,6 +585,8 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
     manifestUrl: cleanUrl,
     enabled: true,
     isBuiltIn: false,
+    scrapers: manifest.scrapers,
+    resources: manifest.resources as (string | { name: string; types?: string[]; idPrefixes?: string[] })[] | undefined
   };
 
   const existing = getInstalledPlugins();
@@ -478,6 +595,16 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
   savePlugins(updated);
 
   return newPlugin;
+}
+
+interface ScraperModuleExports {
+  getStreams?: (
+    paramOrId: string | { tmdbId?: string; id?: string; type?: string; mediaType?: string; season?: number; episode?: number; title?: string },
+    targetType?: string,
+    season?: number,
+    episode?: number,
+    title?: string
+  ) => Promise<StremioRawStream[]>;
 }
 
 export async function fetchStreamsFromPlugin(
@@ -498,7 +625,7 @@ export async function fetchStreamsFromPlugin(
     try {
       const mRes = await corsFetch(plugin.manifestUrl);
       if (!mRes.ok) return [];
-      const manifest = await mRes.json();
+      const manifest: ParsedManifestRaw = await mRes.json();
       const scrapers = manifest.scrapers || [];
       if (!Array.isArray(scrapers) || scrapers.length === 0) return [];
 
@@ -513,49 +640,62 @@ export async function fetchStreamsFromPlugin(
             if (!jsRes.ok) return;
 
             const code = await jsRes.text();
-            const mod: any = { exports: {} };
+            const mod: { exports: ScraperModuleExports } = { exports: {} };
+
+            const customConsole = {
+              log: (...args: unknown[]) => console.debug(`[${scraper.name || plugin.name}]`, ...args),
+              info: (...args: unknown[]) => console.info(`[${scraper.name || plugin.name}]`, ...args),
+              warn: (...args: unknown[]) => console.warn(`[${scraper.name || plugin.name}]`, ...args),
+              error: (...args: unknown[]) => console.warn(`[${scraper.name || plugin.name} Scraper Notice]`, ...args),
+              debug: (...args: unknown[]) => console.debug(`[${scraper.name || plugin.name}]`, ...args),
+            };
 
             const customGlobalThis = Object.create(globalThis, {
               fetch: { value: corsFetch, writable: true, configurable: true },
               cheerio: { value: cheerio, writable: true, configurable: true },
               require: { value: customRequire, writable: true, configurable: true },
+              console: { value: customConsole, writable: true, configurable: true },
               TMDB_API_KEY: { value: '4219e299c89411838049ab0dab19ebd5', writable: true, configurable: true }
-            });
+            }) as typeof globalThis & ScraperModuleExports;
 
-            const runner = new Function('module', 'exports', 'globalThis', 'fetch', 'require', 'cheerio', code);
-            runner(mod, mod.exports, customGlobalThis, corsFetch, customRequire, cheerio);
+            const runner = new Function('module', 'exports', 'globalThis', 'fetch', 'require', 'cheerio', 'console', code);
+            runner(mod, mod.exports, customGlobalThis, corsFetch, customRequire, cheerio, customConsole);
 
             const getStreamsFn = mod.exports.getStreams || customGlobalThis.getStreams;
 
             if (typeof getStreamsFn === 'function') {
               const targetType = type === 'series' ? 'tv' : 'movie';
-              let raw: any = null;
+              let raw: StremioRawStream[] | null = null;
 
-              // 1. Try object argument signature first
-              try {
-                raw = await getStreamsFn({
-                  tmdbId: id,
-                  mediaType: targetType,
-                  season: season,
-                  episode: episode,
-                  title: title
-                });
-              } catch (e1) {
-                // Ignore object error, try positional signature
-              }
-
-              // 2. Fallback to positional arguments signature: (id, targetType, season, episode, title)
-              if (!Array.isArray(raw) || raw.length === 0) {
+              if (getStreamsFn.length > 1) {
                 try {
                   raw = await getStreamsFn(id, targetType, season, episode, title);
-                } catch (e2) {
+                } catch {
                   // Ignore
+                }
+              } else {
+                try {
+                  raw = await getStreamsFn({
+                    tmdbId: id,
+                    id: id,
+                    type: targetType,
+                    mediaType: targetType,
+                    season: season,
+                    episode: episode,
+                    title: title
+                  });
+                } catch {
+                  try {
+                    raw = await getStreamsFn(id, targetType, season, episode, title);
+                  } catch {
+                    // Ignore
+                  }
                 }
               }
 
               if (Array.isArray(raw) && raw.length > 0) {
                 const scraperStreams: StreamSource[] = [];
-                raw.forEach((s: any) => {
+                raw.forEach((s: StremioRawStream) => {
                   const rawTitle = s.title || s.name || scraper.name || plugin.name;
                   const titleParts = String(rawTitle).split('\n');
                   const namePart = titleParts[0];
@@ -573,7 +713,7 @@ export async function fetchStreamsFromPlugin(
                   const urlStr = s.url || s.link || s.streamUrl || s.downloadUrl || s.file;
                   const magnet = (urlStr && urlStr.startsWith('magnet:')) ? urlStr : (s.magnet || undefined);
                   
-                  const explicitHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash;
+                  const explicitHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash || normalizeInfoHash(urlStr);
                   const infoHash = explicitHash ? normalizeInfoHash(explicitHash) : (magnet ? normalizeInfoHash(magnet) : undefined);
                   const finalMagnet = magnet || (infoHash ? `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(namePart || 'Torrent')}` : undefined);
                   const fileIdx = extractFileIdx(s);
@@ -582,8 +722,11 @@ export async function fetchStreamsFromPlugin(
                   const rawNameStr = s.name ? String(s.name) : (cleanScraperName || plugin.name);
                   const rawSubName = rawNameStr.replace(/\n+/g, ' ').trim();
 
-                  const isWebOnly = /hellspy|sktonline/i.test(scraper.id || '') || /hellspy|sktonline/i.test(scraper.name || '');
-                  const supportsDebrid = !isWebOnly;
+                  const isDebrid = isDebridCachedStream(s);
+                  const hasDirectHttpUrl = Boolean(urlStr && !urlStr.startsWith('magnet:'));
+                  const hasTorrentHash = Boolean(infoHash || (urlStr && urlStr.startsWith('magnet:')));
+                  const isWebOnly = hasDirectHttpUrl && !hasTorrentHash && !isDebrid;
+                  const supportsDebrid = hasTorrentHash || isDebrid;
 
                   const behaviorHints: BehaviorHints = {
                     ...(s.behaviorHints || {}),
@@ -628,37 +771,60 @@ export async function fetchStreamsFromPlugin(
                 }
               }
             }
-          } catch (err) {
-            console.error(`Scraper ${scraper.name} failed or timed out:`, err);
+          } catch (err: unknown) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.warn(`Scraper ${scraper.name} returned no streams or timed out:`, errMsg);
           }
         })
       );
 
       return results;
-    } catch (e) {
-      console.error(`Error executing Nuvio plugin ${plugin.name}:`, e);
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.warn(`Nuvio plugin ${plugin.name} returned no streams:`, errMsg);
       return [];
     }
   }
 
   // ─── Handle Stremio Addons (direct fetch → CORS proxy fallback) ───
+  // If the Stremio plugin declares resources and 'stream' is NOT among them (e.g. Cinemeta is catalog/meta, OpenSubtitles is subtitles), skip!
+  if (plugin.type === 'stremio' && Array.isArray(plugin.resources) && plugin.resources.length > 0) {
+    const supportsStream = plugin.resources.some((r) => {
+      if (typeof r === 'string') return r === 'stream';
+      if (typeof r === 'object' && r !== null) return r.name === 'stream';
+      return false;
+    });
+    if (!supportsStream) {
+      return [];
+    }
+  }
+
+  // Also skip if plugin ID or URL indicates non-stream addon
+  const pluginIdLower = (plugin.id || '').toLowerCase();
+  const pluginUrlLower = (plugin.manifestUrl || '').toLowerCase();
+  if (
+    pluginIdLower.includes('cinemeta') ||
+    pluginUrlLower.includes('cinemeta') ||
+    pluginIdLower.includes('opensubtitles') ||
+    pluginUrlLower.includes('opensubtitles')
+  ) {
+    return [];
+  }
+
   try {
     const streamId = type === 'series' && season && episode ? `${id}:${season}:${episode}` : id;
     const requestUrl = `${baseUrl}/stream/${type}/${streamId}.json`;
 
-    console.log(`[Stremio] Fetching streams: ${requestUrl}`);
-
     const res = await stremioFetch(requestUrl);
-    const data = await res.json();
+    const data: { streams?: StremioRawStream[] } = await res.json();
 
     if (!data.streams || !Array.isArray(data.streams)) {
-      console.warn(`[Stremio] No streams array in response from ${plugin.name}`);
       return [];
     }
 
     console.log(`[Stremio] ${plugin.name} returned ${data.streams.length} streams`);
 
-    const streams: StreamSource[] = data.streams.map((s: any) => {
+    const streams: StreamSource[] = data.streams.map((s: StremioRawStream) => {
       const rawTitle = s.title || s.name || plugin.name;
       const titleParts = String(rawTitle).split('\n');
       const namePart = titleParts[0];
@@ -676,7 +842,7 @@ export async function fetchStreamsFromPlugin(
       const urlStr = s.url || s.link || s.streamUrl;
       const magnet = (urlStr && urlStr.startsWith('magnet:')) ? urlStr : (s.magnet || undefined);
 
-      const explicitHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash;
+      const explicitHash = s.infoHash || s.hash || s.btih || s.behaviorHints?.infoHash || normalizeInfoHash(urlStr);
       const infoHash = explicitHash ? normalizeInfoHash(explicitHash) : (magnet ? normalizeInfoHash(magnet) : undefined);
       const finalMagnet = magnet || (infoHash ? `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(namePart || 'Torrent')}` : undefined);
       const fileIdx = extractFileIdx(s);
@@ -684,8 +850,11 @@ export async function fetchStreamsFromPlugin(
       const rawNameStr = s.name ? String(s.name) : plugin.name;
       const subName = rawNameStr.replace(/\n+/g, ' ').trim();
 
-      const isWebOnly = /hellspy|sktonline/i.test(plugin.id);
-      const supportsDebrid = !isWebOnly;
+      const isDebrid = isDebridCachedStream(s);
+      const hasDirectHttpUrl = Boolean(urlStr && !urlStr.startsWith('magnet:'));
+      const hasTorrentHash = Boolean(infoHash || (urlStr && urlStr.startsWith('magnet:')));
+      const isWebOnly = hasDirectHttpUrl && !hasTorrentHash && !isDebrid;
+      const supportsDebrid = hasTorrentHash || isDebrid;
 
       const behaviorHints: BehaviorHints = {
         ...(s.behaviorHints || {}),
@@ -729,8 +898,9 @@ export async function fetchStreamsFromPlugin(
     }
 
     return streams;
-  } catch (e) {
-    console.error(`[Stremio] Error fetching streams from ${plugin.name}:`, e);
+  } catch (e: unknown) {
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.warn(`[Stremio] ${plugin.name} streams unavailable:`, errMsg);
     return [];
   }
 }

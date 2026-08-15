@@ -20,12 +20,35 @@ export interface MetaItem {
   background?: string;
   description?: string;
   releaseInfo?: string;
+  released?: string;
   imdbRating?: string;
   videos?: Episode[];
 }
 
+interface TMDBFindResult {
+  movie_results?: TMDBItem[];
+  tv_results?: TMDBItem[];
+}
+
+interface TMDBSearchResult {
+  results?: TMDBItem[];
+}
+
+interface TMDBItem {
+  id: number;
+  title?: string;
+  name?: string;
+  original_title?: string;
+  original_name?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  overview?: string;
+  release_date?: string;
+  first_air_date?: string;
+  vote_average?: number;
+}
+
 const TMDB_API_KEY = '4219e299c89411838049ab0dab19ebd5';
-const extIdCache = new Map<string, string | null>();
 
 export async function getCatalog(type: 'movie' | 'series', category: string = 'top', skip: number = 0): Promise<MetaItem[]> {
   try {
@@ -50,9 +73,8 @@ export async function getCatalog(type: 'movie' | 'series', category: string = 't
         metas.map(async (item) => {
           if (!item.id || !item.id.startsWith('tt')) return item;
           try {
-            const tmdbType = type === 'series' ? 'tv' : 'movie';
             const tmdbUrl = `https://api.themoviedb.org/3/find/${item.id}?api_key=${TMDB_API_KEY}&external_source=imdb_id&language=cs-CZ`;
-            const tmdbRes = await fetch(tmdbUrl).then(r => r.json());
+            const tmdbRes: TMDBFindResult = await fetch(tmdbUrl).then(r => r.json());
             const matchedObj = (tmdbRes.movie_results && tmdbRes.movie_results[0]) || (tmdbRes.tv_results && tmdbRes.tv_results[0]);
             if (matchedObj) {
               const czTitle = matchedObj.title || matchedObj.name;
@@ -88,11 +110,11 @@ export async function searchCinemeta(query: string, type: 'movie' | 'series' = '
     // Single parallel round-trip for Cinemeta search + TMDB search
     const [cinemetaRes, tmdbRes] = await Promise.allSettled([
       fetch(`https://v3-cinemeta.strem.io/catalog/${type}/top/search=${encodeURIComponent(query)}.json`).then(r => r.json()),
-      fetch(`https://api.themoviedb.org/3/search/${tmdbType}?api_key=${TMDB_API_KEY}&language=${tmdbLang}&query=${encodeURIComponent(query)}`).then(r => r.json())
+      fetch(`https://api.themoviedb.org/3/search/${tmdbType}?api_key=${TMDB_API_KEY}&language=${tmdbLang}&query=${encodeURIComponent(query)}`).then(r => r.json() as Promise<TMDBSearchResult>)
     ]);
 
     const cinemetaMetas: MetaItem[] = cinemetaRes.status === 'fulfilled' && cinemetaRes.value?.metas ? cinemetaRes.value.metas : [];
-    const tmdbResults: any[] = tmdbRes.status === 'fulfilled' && tmdbRes.value?.results ? tmdbRes.value.results.slice(0, 10) : [];
+    const tmdbResults: TMDBItem[] = tmdbRes.status === 'fulfilled' && tmdbRes.value?.results ? tmdbRes.value.results.slice(0, 10) : [];
 
     // Map TMDB search results instantly without secondary network calls
     const tmdbMetas: MetaItem[] = tmdbResults.map(item => {
@@ -109,7 +131,7 @@ export async function searchCinemeta(query: string, type: 'movie' | 'series' = '
       return {
         id: cinemetaMatch ? cinemetaMatch.id : `tmdb_${item.id}`,
         type: type,
-        name: czName || origName,
+        name: czName || origName || '',
         czTitle: czName,
         originalTitle: origName,
         poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined,

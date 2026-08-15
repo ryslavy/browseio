@@ -1,7 +1,7 @@
 // TorBox Debrid API client for BrowseIO
 // Proxies TorBox API requests through working CORS proxies (https://cors.eu.org/) to bypass browser CORS origin restrictions.
 
-import { normalizeInfoHash, safeDecodeFileName } from './plugin-engine.ts';
+import { normalizeInfoHash, safeDecodeFileName } from './plugin-engine';
 
 const TORBOX_API_BASE = 'https://api.torbox.app/v1/api';
 
@@ -18,6 +18,22 @@ export interface TorBoxCachedResponse {
       }[];
     } | boolean;
   };
+}
+
+export interface TorBoxFileItem {
+  id?: number | string;
+  file_id?: number | string;
+  name?: string;
+  short_name?: string;
+  absolute_path?: string;
+  size?: number;
+}
+
+export interface TorBoxTorrentItem {
+  id?: number | string;
+  torrent_id?: number | string;
+  name?: string;
+  files?: TorBoxFileItem[];
 }
 
 /**
@@ -37,15 +53,15 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
   // 1. Direct fetch first (api.torbox.app supports CORS natively)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(url, { ...init, headers, signal: controller.signal });
     clearTimeout(timeoutId);
-    if (res.ok) return res;
-  } catch (e) {
+    if (res.status < 500) return res;
+  } catch {
     // Fallback to proxy
   }
 
-  // 2. Vercel Edge API proxy + fallback proxies
+  // 2. Local universal server proxy + fallback proxies
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
   const corsProxies: ((u: string) => string)[] = [
     (u: string) => `/api/proxy?url=${encodeURIComponent(u)}`
@@ -65,11 +81,11 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
     try {
       const proxiedUrl = proxyFn(url);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       const res = await fetch(proxiedUrl, { ...init, headers, signal: controller.signal });
       clearTimeout(timeoutId);
-      if (res.ok) return res;
-    } catch (e) {
+      if (res.status < 500) return res;
+    } catch {
       // Try next proxy
     }
   }
@@ -83,7 +99,7 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
  */
 export async function checkTorBoxCached(hashes: string[], apiKey?: string): Promise<Set<string>> {
   const cachedHashes = new Set<string>();
-  if (!hashes || hashes.length === 0) return cachedHashes;
+  if (!apiKey || !apiKey.trim() || !hashes || hashes.length === 0) return cachedHashes;
 
   const cleanHashes = Array.from(
     new Set(
@@ -129,11 +145,12 @@ export async function resolveTorBoxStreamUrl(
   episode?: number,
   fileIdx?: number
 ): Promise<string | null> {
-  if (!apiKey) return null;
+  if (!apiKey || !magnetOrHash || !magnetOrHash.trim()) return null;
+  const normHash = normalizeInfoHash(magnetOrHash);
+  if (!magnetOrHash.startsWith('magnet:') && !normHash) return null;
 
   let magnet = magnetOrHash;
   if (!magnet.startsWith('magnet:')) {
-    const normHash = normalizeInfoHash(magnetOrHash);
     magnet = normHash ? `magnet:?xt=urn:btih:${normHash}` : magnetOrHash;
   }
 
@@ -151,12 +168,24 @@ export async function resolveTorBoxStreamUrl(
     }, apiKey);
 
     const createJson = await createRes.json();
-    if (!createJson.success || !createJson.data) {
-      console.error('TorBox createtorrent failed:', createJson);
-      return null;
-    }
+    let torrentId = createJson?.data?.torrent_id || createJson?.data?.id || (typeof createJson?.data === 'number' || typeof createJson?.data === 'string' ? createJson.data : null);
 
-    const torrentId = createJson.data?.torrent_id || createJson.data?.id || (typeof createJson.data === 'number' || typeof createJson.data === 'string' ? createJson.data : null);
+    // If createtorrent failed or torrent already exists, lookup in user's mylist by hash
+    if (!torrentId && normHash) {
+      try {
+        const listUrl = `${TORBOX_API_BASE}/torrents/mylist`;
+        const listRes = await torboxFetch(listUrl, { method: 'GET' }, apiKey);
+        const listJson = await listRes.json();
+        if (listJson.success && Array.isArray(listJson.data)) {
+          const matchedTorrent = listJson.data.find((t: { hash?: string; id?: string | number }) => t.hash && t.hash.toLowerCase() === normHash.toLowerCase());
+          if (matchedTorrent) {
+            torrentId = matchedTorrent.id || matchedTorrent.torrent_id;
+          }
+        }
+      } catch {
+        // Fallback to null
+      }
+    }
 
     if (!torrentId) {
       console.error('TorBox torrentId not found in response:', createJson);
@@ -171,13 +200,13 @@ export async function resolveTorBoxStreamUrl(
       const listJson = await listRes.json();
 
       if (listJson.success && listJson.data && Array.isArray(listJson.data)) {
-        const torrent = listJson.data.find((t: any) => t.id === torrentId || t.torrent_id === torrentId);
+        const torrent = listJson.data.find((t: TorBoxTorrentItem) => t.id === torrentId || t.torrent_id === torrentId);
         if (torrent && torrent.files && Array.isArray(torrent.files) && torrent.files.length > 0) {
-          let selectedFile: any = null;
+          let selectedFile: TorBoxFileItem | null = null;
 
           // 1. If explicit fileIdx is provided
           if (typeof fileIdx === 'number' && fileIdx >= 0) {
-            selectedFile = torrent.files.find((f: any) => f.id === fileIdx || f.id === String(fileIdx) || f.file_id === fileIdx);
+            selectedFile = torrent.files.find((f: TorBoxFileItem) => f.id === fileIdx || f.id === String(fileIdx) || f.file_id === fileIdx) || null;
             if (!selectedFile && torrent.files[fileIdx]) {
               selectedFile = torrent.files[fileIdx];
             }
@@ -194,7 +223,7 @@ export async function resolveTorBoxStreamUrl(
             ];
 
             for (const regex of regexes) {
-              const match = torrent.files.find((f: any) => {
+              const match = torrent.files.find((f: TorBoxFileItem) => {
                 const rawName = f.name || f.short_name || f.absolute_path || '';
                 const decodedName = safeDecodeFileName(rawName) || rawName;
                 return regex.test(decodedName) || regex.test(rawName);
@@ -209,13 +238,13 @@ export async function resolveTorBoxStreamUrl(
           // 3. Fallback: largest video file selection for multi-file torrent packs
           if (!selectedFile && torrent.files.length > 1) {
             const videoRegex = /\.(mkv|mp4|avi|mov|m4v|webm|flv|wmv|ts)$/i;
-            const videoFiles = torrent.files.filter((f: any) => {
+            const videoFiles = torrent.files.filter((f: TorBoxFileItem) => {
               const decoded = safeDecodeFileName(f.name) || f.name || '';
               return videoRegex.test(decoded);
             });
 
             const candidateFiles = videoFiles.length > 0 ? videoFiles : torrent.files;
-            candidateFiles.sort((a: any, b: any) => (b.size || 0) - (a.size || 0));
+            candidateFiles.sort((a: TorBoxFileItem, b: TorBoxFileItem) => (b.size || 0) - (a.size || 0));
             selectedFile = candidateFiles[0];
           }
 
@@ -278,7 +307,8 @@ export async function cacheTorBoxTorrent(magnetOrHash: string, apiKey: string): 
     } else {
       return { success: false, message: json.detail || json.error || 'Nepodařilo se přidat torrent do TorBoxu' };
     }
-  } catch (error: any) {
-    return { success: false, message: error.message || 'Chyba při komunikaci s TorBox API' };
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Chyba při komunikaci s TorBox API';
+    return { success: false, message: errMsg };
   }
 }

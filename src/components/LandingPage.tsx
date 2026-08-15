@@ -1,23 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
-import { t, i18nEventTarget } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 
 export default function LandingPage() {
-  const [, setLangTick] = useState(0);
-
-  useEffect(() => {
-    const handleLangChange = () => setLangTick(t => t + 1);
-    if (i18nEventTarget) {
-      i18nEventTarget.addEventListener('languageChange', handleLangChange);
-    }
-    return () => {
-      if (i18nEventTarget) {
-        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
-      }
-    };
-  }, []);
+  const { t } = useI18n();
 
   return (
     <div className="fade-in" style={{ maxWidth: '1100px', margin: '0 auto', padding: '1rem 1rem 4rem 1rem' }}>

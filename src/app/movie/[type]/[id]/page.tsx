@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import MovieDetailsClient from '@/components/MovieDetailsClient';
 
 export async function generateStaticParams() {
@@ -8,5 +9,9 @@ export async function generateStaticParams() {
 }
 
 export default function MoviePage() {
-  return <MovieDetailsClient />;
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><div className="spinner"></div></div>}>
+      <MovieDetailsClient />
+    </Suspense>
+  );
 }

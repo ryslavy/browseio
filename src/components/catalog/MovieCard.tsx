@@ -1,9 +1,7 @@
-'use client';
-
 import React, { useState } from 'react';
 import Link from 'next/link';
 import type { MetaItem } from '@/lib/cinemeta';
-import { t, getCurrentLanguage } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 
 interface MovieCardProps {
   movie: MetaItem;
@@ -11,12 +9,12 @@ interface MovieCardProps {
 }
 
 export function MovieCard({ movie, defaultType = 'movie' }: MovieCardProps) {
+  const { t, lang } = useI18n();
   const mediaType = movie.type || defaultType || 'movie';
   const rating = movie.imdbRating ? movie.imdbRating : undefined;
   const year = movie.releaseInfo ? movie.releaseInfo : 'N/A';
   const [imgError, setImgError] = useState(false);
 
-  const lang = getCurrentLanguage();
   const displayName = lang === 'cs'
     ? (movie.czTitle || movie.name)
     : (movie.originalTitle || movie.name);
@@ -48,6 +46,7 @@ export function MovieCard({ movie, defaultType = 'movie' }: MovieCardProps) {
       >
         <div style={{ position: 'relative', aspectRatio: '2/3', width: '100%', backgroundColor: '#2a2d36', overflow: 'hidden' }}>
           {movie.poster && !imgError ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={movie.poster}
               alt={altText}

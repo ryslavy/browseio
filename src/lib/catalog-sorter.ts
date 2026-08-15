@@ -1,4 +1,4 @@
-import type { MetaItem } from './cinemeta.ts';
+import type { MetaItem } from './cinemeta';
 
 export type SortMode =
   | 'popularity'

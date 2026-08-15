@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import type { SortMode } from '@/lib/catalog-sorter';
-import { t, i18nEventTarget } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 
 interface SortDropdownProps {
   currentSort: SortMode;
@@ -10,19 +10,7 @@ interface SortDropdownProps {
 }
 
 export function SortDropdown({ currentSort, onSortChange }: SortDropdownProps) {
-  const [, setLangTick] = useState(0);
-
-  useEffect(() => {
-    const handleLangChange = () => setLangTick(t => t + 1);
-    if (i18nEventTarget) {
-      i18nEventTarget.addEventListener('languageChange', handleLangChange);
-    }
-    return () => {
-      if (i18nEventTarget) {
-        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
-      }
-    };
-  }, []);
+  const { t } = useI18n();
 
   const sortOptions: { value: SortMode; label: string }[] = [
     { value: 'popularity', label: t('sort.popularity') },

@@ -1,19 +1,49 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { getInstalledPlugins, savePlugins, installPluginFromUrl, PluginManifest } from '@/lib/plugin-engine';
 import { t, getCurrentLanguage, setCurrentLanguage, getAvailableLanguages, getCustomTranslations, saveCustomTranslations } from '@/lib/i18n';
 
+interface AddonPreset {
+  name: string;
+  url: string;
+  description: string;
+  badge: string;
+}
+
+const emptySubscribe = () => () => {};
+
+const PRESET_PLUGINS: AddonPreset[] = [
+  {
+    name: 'Torrentio',
+    url: 'https://torrentio.strem.fun/manifest.json',
+    description: 'Nejpopulárnější Stremio torrent & debrid provider (YTS, EZTV, RARBG, 1337x, ThePirateBay).',
+    badge: '⚡ Stremio Streams'
+  },
+  {
+    name: 'OpenSubtitles v3',
+    url: 'https://opensubtitles-v3.strem.io/manifest.json',
+    description: 'Komunitní titulky ve všech jazycích včetně češtiny a slovenštiny.',
+    badge: '💬 Titulky'
+  }
+];
+
 export default function SettingsPage() {
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
   const [torboxKey, setTorboxKey] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('torbox_api_key') || '' : ''));
   const [corsProxy, setCorsProxy] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') || '' : ''));
   const [preferredPlayer, setPreferredPlayer] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem('preferred_local_player') || 'potplayer' : 'potplayer'));
   const [saved, setSaved] = useState(false);
 
   // Plugins State
-  const [plugins, setPlugins] = useState<PluginManifest[]>([]);
+  const [plugins, setPlugins] = useState<PluginManifest[]>(() => getInstalledPlugins());
   const [newPluginUrl, setNewPluginUrl] = useState('');
   const [installing, setInstalling] = useState(false);
+  const [installingPresetUrl, setInstallingPresetUrl] = useState<string | null>(null);
   const [pluginError, setPluginError] = useState<string | null>(null);
 
   // Language State
@@ -23,10 +53,6 @@ export default function SettingsPage() {
     return Object.keys(ct).length > 0 ? JSON.stringify(ct, null, 2) : '';
   });
   const [translationError, setTranslationError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setPlugins(getInstalledPlugins());
-  }, []);
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,10 +92,26 @@ export default function SettingsPage() {
       await installPluginFromUrl(newPluginUrl.trim());
       setPlugins(getInstalledPlugins());
       setNewPluginUrl('');
-    } catch (err: any) {
-      setPluginError(err.message || t('settings.install_error'));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('settings.install_error');
+      setPluginError(msg);
     } finally {
       setInstalling(false);
+    }
+  };
+
+  const handleInstallPreset = async (url: string) => {
+    setInstallingPresetUrl(url);
+    setPluginError(null);
+
+    try {
+      await installPluginFromUrl(url);
+      setPlugins(getInstalledPlugins());
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('settings.install_error');
+      setPluginError(msg);
+    } finally {
+      setInstallingPresetUrl(null);
     }
   };
 
@@ -86,6 +128,14 @@ export default function SettingsPage() {
   };
 
   const availableLanguages = getAvailableLanguages();
+
+  if (!mounted) {
+    return (
+      <div style={{ maxWidth: '750px', margin: '0 auto', padding: '4rem 1rem', display: 'flex', justifyContent: 'center' }}>
+        <div className="spinner"></div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '750px', margin: '0 auto', padding: '2rem 1rem' }}>
@@ -106,6 +156,67 @@ export default function SettingsPage() {
           {t('settings.plugins_desc')}
         </p>
 
+        {/* Recommended Presets */}
+        <div style={{ marginBottom: '1.75rem', padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+          <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '0.95rem', color: '#60a5fa', fontWeight: 600 }}>
+            🌟 {t('settings.presets_title')}
+          </h4>
+          <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', marginBottom: '0.9rem' }}>
+            {t('settings.presets_desc')}
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {PRESET_PLUGINS.map((preset) => {
+              const isInstalled = plugins.some(p => p.manifestUrl === preset.url || p.id.toLowerCase() === preset.name.toLowerCase());
+              const isCurrentInstalling = installingPresetUrl === preset.url;
+
+              return (
+                <div
+                  key={preset.url}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.6rem 0.9rem',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                    gap: '0.75rem',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff' }}>{preset.name}</span>
+                      <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem', borderRadius: '4px', backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd' }}>
+                        {preset.badge}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                      {preset.description}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isInstalled || isCurrentInstalling}
+                    onClick={() => handleInstallPreset(preset.url)}
+                    className={`btn ${isInstalled ? 'btn-secondary' : 'btn-primary'}`}
+                    style={{
+                      fontSize: '0.8rem',
+                      padding: '0.35rem 0.9rem',
+                      borderRadius: '9999px',
+                      opacity: isInstalled ? 0.7 : 1
+                    }}
+                  >
+                    {isCurrentInstalling ? t('settings.installing') : isInstalled ? t('settings.preset_installed') : `➕ ${t('settings.install_preset')}`}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Custom Plugin URL Input */}
         <form onSubmit={handleInstallPlugin} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
           <input 
             type="text" 
@@ -126,6 +237,7 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* Installed Plugins List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <h4 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{t('settings.installed_plugins')} ({plugins.length})</h4>
           {plugins.length === 0 ? (
@@ -199,10 +311,10 @@ export default function SettingsPage() {
               className="input"
               style={{ width: '100%', padding: '0.75rem 1rem', fontSize: '0.95rem', borderRadius: '8px', cursor: 'pointer' }}
             >
-              <option value="potplayer" style={{ backgroundColor: '#1a1d24' }}>🍿 PotPlayer (Windows)</option>
+              <option value="potplayer" style={{ backgroundColor: '#1a1d24' }}>🟣 PotPlayer (Windows)</option>
               <option value="vlc" style={{ backgroundColor: '#1a1d24' }}>🟧 VLC Media Player (Cross-platform)</option>
-              <option value="mpv" style={{ backgroundColor: '#1a1d24' }}>🎬 MPV Player (Cross-platform)</option>
-              <option value="infuse" style={{ backgroundColor: '#1a1d24' }}>💧 Infuse (macOS / iOS)</option>
+              <option value="mpv" style={{ backgroundColor: '#1a1d24' }}>🔴 MPV Player (Cross-platform)</option>
+              <option value="infuse" style={{ backgroundColor: '#1a1d24' }}>🔵 Infuse (macOS / iOS)</option>
             </select>
           </div>
         </form>

@@ -84,6 +84,7 @@ const CS_TRANSLATIONS: TranslationMap = {
   'streams.searching_more': 'Hledám další zdroje...',
   'streams.filter_source': 'Doplněk:',
   'streams.filter_subsource': 'Pod-zdroj:',
+  'streams.all_subsources': 'Všechny pod-zdroje',
   'streams.filter_quality': 'Kvalita:',
   'streams.filter_audio': 'Jazyk:',
   'streams.sort_label': 'Řadit dle:',
@@ -109,21 +110,31 @@ const CS_TRANSLATIONS: TranslationMap = {
   'streams.badge_direct_web': '🌐 Web Video',
   'streams.badge_debrid_http': '⚡ Debrid Stream',
   'streams.badge_p2p_magnet': '🧲 P2P Magnet',
-  'streams.audio_notice': '💡 Tipy pro zvuk: Některé Debrid/Stremio MKV streamy s AC3/EAC3/DTS zvukovým stoupáním vyžadují externí přehrávač (PotPlayer, VLC, MPV) pro plnou podporu zvuku.',
+  'streams.audio_notice': '💡 Tipy pro zvuk: Některé Debrid/Stremio MKV streamy s AC3/EAC3/DTS zvukovým kódováním vyžadují externí přehrávač (PotPlayer, VLC, MPV) pro plnou podporu prostorového zvuku.',
   'streams.seeders': 'seedů',
   'streams.unknown_size': 'Neznámá velikost',
   'streams.no_streams': 'Žádné streamy nebyly nalezeny pro vybraný filtr.',
+  'streams.reset_filters': 'Obnovit všechny filtry',
   'streams.no_plugins_notice': 'Zatím nemáte přidané žádné funkční doplňky. Přidejte si doplňky v Nastavení.',
   'streams.manage_plugins': '⚙️ Spravovat doplňky v Nastavení',
   'streams.play_web': '▶ Přehrát v aplikaci',
   'streams.play_webtor': '▶ Přehrát přes WebTor',
   'streams.play_debrid': '⚡ Instant Play (TorBox)',
+  'streams.cannot_play_direct': 'Nelze přehrát přímo',
   'streams.cache_debrid': '⚡ Cache na TorBox',
   'streams.caching': '⚡ Ukládám...',
   'streams.cached_success': '✓ Přidáno do TorBoxu!',
   'streams.download': '⬇️ Stáhnout',
   'streams.copy_link': '📋 Kopírovat odkaz',
   'streams.link_copied': '✓ Odkaz zkopírován!',
+  'streams.p2p_notice_alert': 'Tento magnet link je nutné nejprve nacachovat na TorBox (pokud je podporován) nebo otevřít ve vašem torrent klientovi (pomocí tlačítka Stáhnout). Nativní webový přehrávač aktuálně nepodporuje přímé P2P streamování.',
+  'streams.torbox_missing_key': 'Chybí TorBox API klíč. Přidejte si jej v Nastavení.',
+  'streams.magnet_unavailable': 'Magnet odkaz není k dispozici.',
+  'streams.torbox_cache_failed': 'Chyba při komunikaci s TorBox API.',
+  'streams.launch_player_error': 'Chyba při spouštění přehrávače.',
+  'streams.debrid_link_failed': 'Nepodařilo se získat Debrid link.',
+  'streams.local_player_requirements': 'Ke spuštění v externím přehrávači je potřeba přímý stream nebo kešovaný TorBox torrent.',
+  'streams.download_unavailable': 'Stahování pro tento zdroj není k dispozici.',
 
   // Movie Details Page
   'details.not_found': 'Film nebo seriál nebyl nalezen.',
@@ -135,10 +146,48 @@ const CS_TRANSLATIONS: TranslationMap = {
   'details.released': 'Vydáno:',
   'details.no_description': 'Popis není k dispozici.',
 
+  'player.subtitles': 'Titulky',
+  'player.subtitles_off': 'Vypnuto',
+  'player.sub_size': 'Velikost titulků',
+  'player.sub_position': 'Pozice titulků (výška)',
+  'player.upload_subtitles': '📁 Nahrát vlastní (.srt / .vtt)',
+  'player.sub_delay': 'Časový posun titulků',
+  'player.subtitle_delay': 'Posun:',
+  'player.audio_tracks': 'Zvuková stopa',
+  'player.audio_track_default': 'Výchozí stopa (Original)',
+  'player.dubbing_all': 'Všechny jazyky',
+  'player.dubbing_cz': '🇨🇿 CZ Dabing',
+  'player.dubbing_sk': '🇸🇰 SK Dabing',
+  'player.dubbing_en': '🇬🇧 EN Originál',
+  'player.dubbing_dual': '🌐 Dual / Multi',
+  'player.stream_switcher': '📑 Zdroje videa',
+  'player.stream_switcher_title': 'Dostupné zdroje videa',
+  'player.switch_stream': 'Přepnout',
+  'player.playing_current': 'Právě hraje ▶',
+  'player.no_other_streams': 'Žádné další alternativní streamy nebyly nalezeny.',
+  'player.open_external': 'Spustit v externím přehrávači',
+  'player.launch_in': 'Spustit v',
+  'player.launch_potplayer': '🟣 Spustit v PotPlayeru',
+  'player.launch_vlc': '🟠 Spustit ve VLC',
+  'player.launch_mpv': '🔴 Spustit v MPV',
+  'player.launch_infuse': '🔵 Spustit v Infuse',
+  'player.shortcuts_hint': 'Mezerník (Play/Pauza) • F (Fullscreen) • M (Ztlumit) • S (Zdroje) • C (Titulky) • Šipky (Skok / Hlasitost)',
+  'player.error_unsupported_title': 'Přehrávač v prohlížeči nemůže načíst tento formát',
+  'player.error_unsupported_desc': 'Tento proud videa nebo zvukový kodek (AC3/DTS/HEVC) vyžaduje externí přehrávač s hardwarovými kodeky.',
+  'player.copied_link': '✓ Odkaz zkopírován',
+  'player.copy_direct_link': '📋 Kopírovat přímý odkaz',
+  'player.try_other_stream': '📑 Zkusit jiný zdroj videa',
+  'player.switching_stream': 'Přepínám zdroj...',
+  'player.multi_audio_note': '💡 Soubor obsahuje více zvukových stop. Prohlížeč v přímém souboru přehrává výchozí stopu. Pro volbu jiné stopy otevřete video v:',
+
   // Settings Page
   'settings.title': 'Nastavení BrowseIO',
   'settings.plugins_title': 'Doplňky a Scrapery (Stremio & Nuvio Compatible)',
   'settings.plugins_desc': 'Vložte URL adresu jakéhokoliv Stremio Addonu nebo Nuvio Pluginu pro načítání streamů.',
+  'settings.presets_title': 'Doporučené doplňky a předvolby (Presets)',
+  'settings.presets_desc': 'Rychlá instalace populárních a prověřených komunitních doplňků jedním kliknutím.',
+  'settings.install_preset': 'Instalovat',
+  'settings.preset_installed': 'Nainstalováno ✓',
   'settings.plugin_url_placeholder': 'stremio://... nebo https://.../manifest.json',
   'settings.add_plugin': 'Přidat doplněk',
   'settings.installing': 'Instaluji...',
@@ -247,6 +296,7 @@ const EN_TRANSLATIONS: TranslationMap = {
   'streams.searching_more': 'Searching more sources...',
   'streams.filter_source': 'Plugin:',
   'streams.filter_subsource': 'Sub-source:',
+  'streams.all_subsources': 'All sub-sources',
   'streams.filter_quality': 'Quality:',
   'streams.filter_audio': 'Audio/Lang:',
   'streams.sort_label': 'Sort by:',
@@ -276,17 +326,27 @@ const EN_TRANSLATIONS: TranslationMap = {
   'streams.seeders': 'seeders',
   'streams.unknown_size': 'Unknown size',
   'streams.no_streams': 'No streams found matching the selected filter.',
+  'streams.reset_filters': 'Reset all filters',
   'streams.no_plugins_notice': 'You do not have any active plugins installed yet. Add plugins in Settings.',
   'streams.manage_plugins': '⚙️ Manage Plugins in Settings',
   'streams.play_web': '▶ Play in App',
   'streams.play_webtor': '▶ Play via WebTor',
   'streams.play_debrid': '⚡ Instant Play (TorBox)',
+  'streams.cannot_play_direct': 'Cannot play directly',
   'streams.cache_debrid': '⚡ Cache to TorBox',
   'streams.caching': '⚡ Caching...',
   'streams.cached_success': '✓ Added to TorBox!',
   'streams.download': '⬇️ Download',
   'streams.copy_link': '📋 Copy Link',
   'streams.link_copied': '✓ Link Copied!',
+  'streams.p2p_notice_alert': 'This magnet link must first be cached on TorBox or opened in your torrent client (using the Download button). Native web player does not support direct P2P streaming.',
+  'streams.torbox_missing_key': 'TorBox API Key is missing. Please add it in Settings.',
+  'streams.magnet_unavailable': 'Magnet link is not available.',
+  'streams.torbox_cache_failed': 'Error communicating with TorBox API.',
+  'streams.launch_player_error': 'Error launching player.',
+  'streams.debrid_link_failed': 'Failed to resolve Debrid link.',
+  'streams.local_player_requirements': 'An HTTP stream or cached TorBox torrent is required to launch in an external player.',
+  'streams.download_unavailable': 'Download is not available for this source.',
 
   // Movie Details Page
   'details.not_found': 'Movie or series not found.',
@@ -298,10 +358,49 @@ const EN_TRANSLATIONS: TranslationMap = {
   'details.released': 'Released:',
   'details.no_description': 'No description available.',
 
+  // Video Player Controls & Drawer
+  'player.subtitles': 'Subtitles',
+  'player.subtitles_off': 'Off',
+  'player.sub_size': 'Subtitle Size',
+  'player.sub_position': 'Subtitle Position (Height)',
+  'player.upload_subtitles': '📁 Upload custom (.srt / .vtt)',
+  'player.sub_delay': 'Subtitle Delay',
+  'player.subtitle_delay': 'Offset:',
+  'player.audio_tracks': 'Audio Track',
+  'player.audio_track_default': 'Default Track (Original)',
+  'player.dubbing_all': 'All Languages',
+  'player.dubbing_cz': '🇨🇿 Czech',
+  'player.dubbing_sk': '🇸🇰 Slovak',
+  'player.dubbing_en': '🇬🇧 English',
+  'player.dubbing_dual': '🌐 Dual / Multi',
+  'player.stream_switcher': '📑 Video Sources',
+  'player.stream_switcher_title': 'Available Video Streams',
+  'player.switch_stream': 'Switch',
+  'player.playing_current': 'Playing Now ▶',
+  'player.no_other_streams': 'No other alternative streams found.',
+  'player.open_external': 'Launch in external player',
+  'player.launch_in': 'Launch in',
+  'player.launch_potplayer': '🟣 Launch in PotPlayer',
+  'player.launch_vlc': '🟠 Launch in VLC',
+  'player.launch_mpv': '🔴 Launch in MPV',
+  'player.launch_infuse': '🔵 Launch in Infuse',
+  'player.shortcuts_hint': 'Space (Play/Pause) • F (Fullscreen) • M (Mute) • S (Sources) • C (Subtitles) • Arrows (Seek / Volume)',
+  'player.error_unsupported_title': 'In-browser player cannot load this format',
+  'player.error_unsupported_desc': 'This video stream or audio codec (AC3/DTS/HEVC) requires an external media player with hardware codecs.',
+  'player.copied_link': '✓ Link copied',
+  'player.copy_direct_link': '📋 Copy direct link',
+  'player.try_other_stream': '📑 Try another video source',
+  'player.switching_stream': 'Switching stream...',
+  'player.multi_audio_note': '💡 Container contains multiple audio tracks. Browser plays default track. To choose another track, launch in:',
+
   // Settings Page
   'settings.title': 'BrowseIO Settings',
   'settings.plugins_title': 'Plugins & Scrapers (Stremio & Nuvio Compatible)',
   'settings.plugins_desc': 'Enter any Stremio Addon or Nuvio Plugin URL to stream media.',
+  'settings.presets_title': 'Recommended Addons & Presets',
+  'settings.presets_desc': 'Quick 1-click installation of popular and verified community addons.',
+  'settings.install_preset': 'Install',
+  'settings.preset_installed': 'Installed ✓',
   'settings.plugin_url_placeholder': 'stremio://... or https://.../manifest.json',
   'settings.add_plugin': 'Add Plugin',
   'settings.installing': 'Installing...',
@@ -337,7 +436,9 @@ const EN_TRANSLATIONS: TranslationMap = {
   'sort.name_desc': 'Z-A',
 };
 
-const BUILT_IN_LANGS: Record<string, TranslationMap> = {
+export { CS_TRANSLATIONS, EN_TRANSLATIONS };
+
+export const BUILT_IN_LANGS: Record<string, TranslationMap> = {
   cs: CS_TRANSLATIONS,
   en: EN_TRANSLATIONS,
 };
@@ -374,15 +475,25 @@ export function saveCustomTranslations(translations: TranslationMap): void {
   }
 }
 
+export function subscribeLanguage(callback: () => void): () => void {
+  if (typeof window === 'undefined' || !i18nEventTarget) return () => {};
+  i18nEventTarget.addEventListener('languageChange', callback);
+  return () => {
+    if (i18nEventTarget) {
+      i18nEventTarget.removeEventListener('languageChange', callback);
+    }
+  };
+}
+
 /**
  * Get a translated string by key.
- * Priority: custom user translations > current language > Czech fallback > key
+ * Priority: custom user translations > explicit language / current language > Czech fallback > key
  */
-export function t(key: string): string {
+export function t(key: string, explicitLang?: string): string {
   const custom = getCustomTranslations();
   if (custom[key]) return custom[key];
 
-  const lang = getCurrentLanguage();
+  const lang = explicitLang || getCurrentLanguage();
   const langTranslations = BUILT_IN_LANGS[lang];
   if (langTranslations && langTranslations[key]) return langTranslations[key];
 
@@ -397,6 +508,23 @@ export function getAvailableLanguages(): { code: string; label: string; flag: st
     { code: 'cs', label: 'Čeština', flag: '🇨🇿' },
     { code: 'en', label: 'English', flag: '🇬🇧' },
   ];
+}
+
+import { useSyncExternalStore, useCallback } from 'react';
+
+export function useI18n() {
+  const lang = useSyncExternalStore(
+    subscribeLanguage,
+    getCurrentLanguage,
+    () => 'cs'
+  );
+
+  const translate = useCallback((key: string) => t(key, lang), [lang]);
+
+  return {
+    lang,
+    t: translate
+  };
 }
 
 export function getAllTranslationKeys(): string[] {

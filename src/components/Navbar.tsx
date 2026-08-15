@@ -1,25 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { t, getCurrentLanguage, setCurrentLanguage, getAvailableLanguages, i18nEventTarget } from '@/lib/i18n';
+import { t, getCurrentLanguage, setCurrentLanguage, getAvailableLanguages, subscribeLanguage } from '@/lib/i18n';
 
 export default function Navbar() {
-  const [lang, setLang] = useState('cs');
-
-  useEffect(() => {
-    setLang(getCurrentLanguage());
-    const handleLangChange = () => setLang(getCurrentLanguage());
-
-    if (i18nEventTarget) {
-      i18nEventTarget.addEventListener('languageChange', handleLangChange);
-    }
-    return () => {
-      if (i18nEventTarget) {
-        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
-      }
-    };
-  }, []);
+  const lang = useSyncExternalStore(
+    subscribeLanguage,
+    getCurrentLanguage,
+    () => 'cs'
+  );
 
   const toggleLanguage = () => {
     const nextLang = lang === 'cs' ? 'en' : 'cs';
@@ -50,10 +40,10 @@ export default function Navbar() {
 
         <nav style={{ display: 'flex', gap: '1.25rem' }}>
           <Link href="/?view=landing" style={{ color: 'var(--text-secondary)', fontWeight: 500, textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.color = '#fff'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}>
-            {t('nav.home')}
+            {t('nav.home', lang)}
           </Link>
           <Link href="/?view=catalog&type=movie" style={{ color: 'var(--text-secondary)', fontWeight: 500, textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.color = '#fff'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}>
-            {t('nav.catalog')}
+            {t('nav.catalog', lang)}
           </Link>
         </nav>
       </div>
@@ -84,7 +74,7 @@ export default function Navbar() {
         </button>
 
         <Link href="/settings" className="btn btn-secondary" style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}>
-          {t('nav.settings')} ⚙️
+          {t('nav.settings', lang)} ⚙️
         </Link>
       </div>
     </header>

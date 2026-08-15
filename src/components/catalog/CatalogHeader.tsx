@@ -1,7 +1,5 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { t, i18nEventTarget } from '@/lib/i18n';
+import React from 'react';
+import { useI18n } from '@/lib/i18n';
 
 interface CatalogHeaderProps {
   type: 'movie' | 'series';
@@ -12,19 +10,7 @@ export function CatalogHeader({
   type,
   onTypeChange,
 }: CatalogHeaderProps) {
-  const [, setLangTick] = useState(0);
-
-  useEffect(() => {
-    const handleLangChange = () => setLangTick(t => t + 1);
-    if (i18nEventTarget) {
-      i18nEventTarget.addEventListener('languageChange', handleLangChange);
-    }
-    return () => {
-      if (i18nEventTarget) {
-        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
-      }
-    };
-  }, []);
+  const { t } = useI18n();
 
   return (
     <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>

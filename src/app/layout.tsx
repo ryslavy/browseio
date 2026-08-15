@@ -17,8 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="cs" className={inter.variable}>
-      <body>
+    <html lang="cs" className={inter.variable} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <GlassMouseEffect />
         <Navbar />
 

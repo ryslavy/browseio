@@ -8,7 +8,7 @@ import { CatalogHeader } from '@/components/catalog/CatalogHeader';
 import { FilterBar } from '@/components/catalog/FilterBar';
 import { SortDropdown } from '@/components/catalog/SortDropdown';
 import { MovieGrid } from '@/components/catalog/MovieGrid';
-import { t, i18nEventTarget } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 import MovieDetailsClient from '@/components/MovieDetailsClient';
 import SettingsPage from '@/app/settings/page';
 import LandingPage from '@/components/LandingPage';
@@ -61,23 +61,10 @@ const SERIES_GENRES = [
 ];
 
 function CatalogContent() {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-
-  const [, setLangTick] = useState(0);
-
-  useEffect(() => {
-    const handleLangChange = () => setLangTick(t => t + 1);
-    if (i18nEventTarget) {
-      i18nEventTarget.addEventListener('languageChange', handleLangChange);
-    }
-    return () => {
-      if (i18nEventTarget) {
-        i18nEventTarget.removeEventListener('languageChange', handleLangChange);
-      }
-    };
-  }, []);
 
   // URL State derivation
   const typeParam = (searchParams.get('type') === 'series' ? 'series' : 'movie') as 'movie' | 'series';
@@ -287,7 +274,6 @@ function CatalogContent() {
         searchQuery={qParam}
         onGenreChange={handleGenreChange}
         onSearchSubmit={handleSearchSubmit}
-        type={typeParam}
         loading={loading}
       />
 
@@ -336,7 +322,7 @@ function useCurrentView() {
     function updateView() {
       if (typeof window === 'undefined') return;
 
-      let path = pathname || window.location.pathname;
+      const path = pathname || window.location.pathname;
       const search = searchParams ? searchParams.toString() : window.location.search;
       const hash = typeof window !== 'undefined' ? window.location.hash : '';
       const sp = new URLSearchParams(search);
