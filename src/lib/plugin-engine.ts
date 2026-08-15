@@ -391,45 +391,53 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
 
   // 1. Check if user configured a custom CORS proxy in Settings
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
+  const isGithubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
+
   if (customProxy && customProxy.trim()) {
     const cp = customProxy.trim();
     const proxiedUrl = cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(urlStr)}` : `${cp}/${urlStr}`;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       const res = await fetch(proxiedUrl, { ...init, signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) return res;
     } catch {
-      // Fallback to internal universal proxy
+      // Fallback
     }
   }
 
   // 2. Direct fetch attempt (fast 1.5s check - if server allows CORS, browser uses direct connection)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
-    const res = await fetch(input, { ...init, signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (res.ok) return res;
-  } catch {
-    // Direct fetch failed (CORS or offline), proceed to universal proxy
+  if (!isGithubPages) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      const res = await fetch(input, { ...init, signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) return res;
+    } catch {
+      // Direct fetch failed (CORS or offline), proceed to universal proxy
+    }
   }
 
   // 3. Universal internal server proxy (/api/proxy) & public fallback proxies
-  const corsProxies: ((u: string) => string)[] = [
-    (u: string) => `/api/proxy?url=${encodeURIComponent(u)}`,
+  const corsProxies: ((u: string) => string)[] = [];
+  if (!isGithubPages) {
+    corsProxies.push((u: string) => `/api/proxy?url=${encodeURIComponent(u)}`);
+  }
+
+  corsProxies.push(
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://cors.eu.org/${u}`,
     (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-  ];
+  );
 
   for (const proxyFn of corsProxies) {
     try {
       const proxiedUrl = proxyFn(urlStr);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const res = await fetch(proxiedUrl, {
         ...init,
@@ -456,7 +464,25 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
  * Has an extended timeout for community debrid/torrent addons.
  */
 const stremioFetch = async (url: string): Promise<Response> => {
-  // 1. Try fast direct fetch first (Stremio addons support CORS natively) with 3.5s timeout
+  const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
+  const isGithubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
+
+  // 1. If custom proxy configured, prioritize it
+  if (customProxy && customProxy.trim()) {
+    const cp = customProxy.trim();
+    const proxiedUrl = cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(url)}` : `${cp}/${url}`;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(proxiedUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) return res;
+    } catch {
+      // Fallback
+    }
+  }
+
+  // 2. Try fast direct fetch (Stremio addons support CORS natively) with 3.5s timeout
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);
@@ -473,17 +499,13 @@ const stremioFetch = async (url: string): Promise<Response> => {
     // Fast fail direct fetch, try proxies immediately
   }
 
-  // 2. Fallback to CORS proxies with generous timeout for community addons
-  const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
+  // 3. Fallback to CORS proxies
   const corsProxies: ((u: string) => string)[] = [];
-
-  if (customProxy && customProxy.trim()) {
-    const cp = customProxy.trim();
-    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
+  if (!isGithubPages) {
+    corsProxies.push((u: string) => `/api/proxy?url=${encodeURIComponent(u)}`);
   }
 
   corsProxies.push(
-    (u: string) => `/api/proxy?url=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://cors.eu.org/${u}`

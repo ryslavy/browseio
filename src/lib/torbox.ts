@@ -50,26 +50,41 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
-  // 1. Direct fetch first (api.torbox.app supports CORS natively)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(url, { ...init, headers, signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (res.status < 500) return res;
-  } catch {
-    // Fallback to proxy
-  }
-
-  // 2. Local universal server proxy + fallback proxies
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
-  const corsProxies: ((u: string) => string)[] = [
-    (u: string) => `/api/proxy?url=${encodeURIComponent(u)}`
-  ];
+  const isGithubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
 
+  // 1. Try Custom CORS proxy first if configured (essential for GitHub Pages)
   if (customProxy && customProxy.trim()) {
     const cp = customProxy.trim();
-    corsProxies.push((u: string) => cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(u)}` : `${cp}/${u}`);
+    const proxiedUrl = cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(url)}` : `${cp}/${url}`;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(proxiedUrl, { ...init, headers, signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.status < 500) return res;
+    } catch {
+      // Fallback
+    }
+  }
+
+  // 2. Direct fetch attempt (works on localhost / non-CORS blocked origins)
+  if (!isGithubPages) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(url, { ...init, headers, signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.status < 500) return res;
+    } catch {
+      // Fallback to proxy
+    }
+  }
+
+  // 3. Local universal server proxy (for self-hosted or Vercel Node backend)
+  const corsProxies: ((u: string) => string)[] = [];
+  if (!isGithubPages) {
+    corsProxies.push((u: string) => `/api/proxy?url=${encodeURIComponent(u)}`);
   }
 
   corsProxies.push(

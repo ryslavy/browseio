@@ -24,13 +24,13 @@ const ALLOWED_ORIGINS = [
 ];
 
 function getCorsHeaders(request) {
-  const origin = request.headers.get('Origin') || '';
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const origin = request.headers.get('Origin') || '*';
 
   return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Range, Accept, Origin, Cookie, User-Agent',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type, Set-Cookie',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -67,7 +67,7 @@ const worker = {
         JSON.stringify({
           error: 'Missing target URL',
           usage: 'Add target URL as query parameter: ?https://example.com/api',
-          version: '1.0.0',
+          version: '1.1.0',
           name: 'BrowseIO CORS Proxy'
         }),
         {
@@ -97,15 +97,28 @@ const worker = {
     }
 
     try {
+      const targetHeaders = new Headers();
+      targetHeaders.set('User-Agent', request.headers.get('User-Agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+      targetHeaders.set('Accept', request.headers.get('Accept') || '*/*');
+      targetHeaders.set('Accept-Language', request.headers.get('Accept-Language') || 'cs,sk;q=0.9,en;q=0.8');
+
+      if (request.headers.has('Authorization')) {
+        targetHeaders.set('Authorization', request.headers.get('Authorization'));
+      }
+      if (request.headers.has('Content-Type')) {
+        targetHeaders.set('Content-Type', request.headers.get('Content-Type'));
+      }
+      if (request.headers.has('Range')) {
+        targetHeaders.set('Range', request.headers.get('Range'));
+      }
+      if (request.headers.has('Cookie')) {
+        targetHeaders.set('Cookie', request.headers.get('Cookie'));
+      }
+
       // Forward the request to the target
       const targetRequest = new Request(targetUrl, {
         method: request.method,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': request.headers.get('Accept') || '*/*',
-          'Accept-Language': 'cs,sk;q=0.9,en;q=0.8',
-          'Accept-Encoding': 'gzip, deflate',
-        },
+        headers: targetHeaders,
         body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
         redirect: 'follow',
       });
