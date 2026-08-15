@@ -142,14 +142,31 @@ export default function MovieDetailsClient({ type: propType, id: propId }: Movie
             const processedStreams = await checkTorBoxCacheForSources(partialRaw);
             if (activeFetchIdRef.current === fetchId) {
               setSources(prev => {
-                const existing = new Set(prev.map(s => s.url || s.magnet || s.title));
-                const fresh = processedStreams.filter(s => !existing.has(s.url || s.magnet || s.title));
-                return [...prev, ...fresh];
+                // Update existing streams with debrid cache status if newly detected
+                const updated = prev.map(item => {
+                  const match = processedStreams.find(p => 
+                    (p.url && p.url === item.url) || 
+                    (p.magnet && p.magnet === item.magnet) || 
+                    (p.title && p.title === item.title) ||
+                    (p.infoHash && item.infoHash && p.infoHash.toLowerCase() === item.infoHash.toLowerCase())
+                  );
+                  if (match && match.isTorBoxCached && !item.isTorBoxCached) {
+                    return { ...item, isTorBoxCached: true, type: 'debrid' as const };
+                  }
+                  return item;
+                });
+
+                const existingKeys = new Set(updated.map(s => s.url || s.magnet || s.title));
+                const fresh = processedStreams.filter(s => !existingKeys.has(s.url || s.magnet || s.title));
+                return [...updated, ...fresh];
               });
             }
           };
 
-          await fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode, title, handlePartial);
+          const returned = await fetchStreamsFromPlugin(plugin, type as string, id as string, selectedSeason, selectedEpisode, title, handlePartial);
+          if (returned && returned.length > 0) {
+            await handlePartial(returned);
+          }
         } catch (e) {
           console.warn(`[Plugin] Error loading streams from ${plugin.name}:`, e);
         }

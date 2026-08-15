@@ -407,17 +407,15 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     }
   }
 
-  // 2. Direct fetch attempt (fast 1.5s check - if server allows CORS, browser uses direct connection)
-  if (!isGithubPages) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1500);
-      const res = await fetch(input, { ...init, signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (res.ok) return res;
-    } catch {
-      // Direct fetch failed (CORS or offline), proceed to universal proxy
-    }
+  // 2. Direct fetch attempt (fast check - if server allows CORS, browser uses direct connection)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(input, { ...init, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) return res;
+  } catch {
+    // Direct fetch failed (CORS or offline), proceed to proxies
   }
 
   // 3. Universal internal server proxy (/api/proxy) & public fallback proxies

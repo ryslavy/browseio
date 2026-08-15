@@ -53,7 +53,7 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
   const isGithubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
 
-  // 1. Try Custom CORS proxy first if configured (essential for GitHub Pages)
+  // 1. Try Custom CORS proxy first if configured
   if (customProxy && customProxy.trim()) {
     const cp = customProxy.trim();
     const proxiedUrl = cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(url)}` : `${cp}/${url}`;
@@ -68,20 +68,18 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
     }
   }
 
-  // 2. Direct fetch attempt (works on localhost / non-CORS blocked origins)
-  if (!isGithubPages) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(url, { ...init, headers, signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (res.status < 500) return res;
-    } catch {
-      // Fallback to proxy
-    }
+  // 2. Direct fetch attempt (works when CORS is permitted or on localhost)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(url, { ...init, headers, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.status < 500) return res;
+  } catch {
+    // Fallback to proxy
   }
 
-  // 3. Local universal server proxy (for self-hosted or Vercel Node backend)
+  // 3. Local universal server proxy (for self-hosted or Node backend) & fallback public proxies
   const corsProxies: ((u: string) => string)[] = [];
   if (!isGithubPages) {
     corsProxies.push((u: string) => `/api/proxy?url=${encodeURIComponent(u)}`);
@@ -89,7 +87,8 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
 
   corsProxies.push(
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u: string) => `https://cors.eu.org/${u}`
+    (u: string) => `https://cors.eu.org/${u}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
   );
 
   for (const proxyFn of corsProxies) {
@@ -134,13 +133,37 @@ export async function checkTorBoxCached(hashes: string[], apiKey?: string): Prom
     const json: TorBoxCachedResponse = await res.json();
 
     if (json && json.data) {
-      Object.keys(json.data).forEach(hash => {
-        const val = json.data[hash];
-        if (val) {
-          const normKey = normalizeInfoHash(hash) || hash.toLowerCase();
-          cachedHashes.add(normKey);
-        }
-      });
+      if (Array.isArray(json.data)) {
+        json.data.forEach((item: unknown) => {
+          if (typeof item === 'string') {
+            const norm = normalizeInfoHash(item) || item.toLowerCase();
+            cachedHashes.add(norm);
+          } else if (item && typeof item === 'object') {
+            const obj = item as Record<string, unknown>;
+            const rawHash = (obj.hash || obj.info_hash || obj.infoHash || obj.btih || obj.hash_id || obj.torrent_id) as string;
+            if (rawHash && typeof rawHash === 'string') {
+              const norm = normalizeInfoHash(rawHash) || rawHash.toLowerCase();
+              cachedHashes.add(norm);
+            }
+          }
+        });
+      } else if (typeof json.data === 'object' && json.data !== null) {
+        Object.keys(json.data).forEach(hash => {
+          const val = (json.data as Record<string, unknown>)[hash];
+          if (val) {
+            const normKey = normalizeInfoHash(hash) || hash.toLowerCase();
+            cachedHashes.add(normKey);
+            if (typeof val === 'object' && val !== null) {
+              const obj = val as Record<string, unknown>;
+              const innerHash = (obj.hash || obj.info_hash || obj.infoHash) as string;
+              if (innerHash && typeof innerHash === 'string') {
+                const normInner = normalizeInfoHash(innerHash) || innerHash.toLowerCase();
+                cachedHashes.add(normInner);
+              }
+            }
+          }
+        });
+      }
     }
   } catch (error) {
     console.error('TorBox checkCached error:', error);
