@@ -783,8 +783,15 @@ export async function fetchStreamsFromPlugin(
               const targetType = type === 'series' ? 'tv' : 'movie';
               let raw: StremioRawStream[] | null = null;
 
-              // 1. Try with numeric TMDB ID first (if resolved)
-              if (numericTmdbId) {
+              // 1. Try standard positional arguments with ORIGINAL id first (essential for SKTorrent, HellSpy, etc.)
+              try {
+                raw = await getStreamsFn(id, targetType, season, episode, title);
+              } catch {
+                // Ignore
+              }
+
+              // 2. If positional call returned empty, try with numeric TMDB ID if different from original id
+              if ((!Array.isArray(raw) || raw.length === 0) && numericTmdbId && numericTmdbId !== id) {
                 try {
                   raw = await getStreamsFn(numericTmdbId, targetType, season, episode, title);
                 } catch {
@@ -792,21 +799,21 @@ export async function fetchStreamsFromPlugin(
                 }
               }
 
-              // 2. If empty and IMDb ID exists (or different from numericTmdbId), try with IMDb ID
-              if ((!Array.isArray(raw) || raw.length === 0) && (imdbId || id)) {
+              // 3. If still empty, try with IMDb ID if different from original id
+              if ((!Array.isArray(raw) || raw.length === 0) && imdbId && imdbId !== id) {
                 try {
-                  raw = await getStreamsFn(imdbId || id, targetType, season, episode, title);
+                  raw = await getStreamsFn(imdbId, targetType, season, episode, title);
                 } catch {
                   // Ignore
                 }
               }
 
-              // 3. If empty, try object parameter signature with all IDs
-              if (!Array.isArray(raw) || raw.length === 0) {
+              // 4. If function takes an object parameter (fn.length <= 1) and nothing found yet, pass object
+              if ((!Array.isArray(raw) || raw.length === 0) && getStreamsFn.length <= 1) {
                 try {
                   raw = await getStreamsFn({
                     tmdbId: numericTmdbId || id,
-                    id: numericTmdbId || id,
+                    id: id,
                     imdbId: imdbId || id,
                     type: targetType,
                     mediaType: targetType,
@@ -815,15 +822,6 @@ export async function fetchStreamsFromPlugin(
                     title: title,
                     name: title
                   });
-                } catch {
-                  // Ignore
-                }
-              }
-
-              // 4. If still empty and title exists, try passing title as first argument
-              if ((!Array.isArray(raw) || raw.length === 0) && title) {
-                try {
-                  raw = await getStreamsFn(title, targetType, season, episode, numericTmdbId || id);
                 } catch {
                   // Ignore
                 }
