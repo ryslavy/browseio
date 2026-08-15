@@ -75,9 +75,12 @@ async function handleUniversalProxy(request: NextRequest, method: string) {
         : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       'Accept': incomingAccept || 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,text/plain,*/*;q=0.8',
       'Accept-Language': 'cs,sk;q=0.9,en;q=0.8,en-US;q=0.7',
-      'Origin': targetOrigin,
       'Referer': targetReferer,
     };
+
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      headers['Origin'] = targetOrigin;
+    }
 
     if (rangeHeader) {
       headers['Range'] = rangeHeader;

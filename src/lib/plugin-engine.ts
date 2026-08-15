@@ -465,10 +465,10 @@ const corsFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
   }
 
   corsProxies.push(
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u: string) => `https://cors.eu.org/${u}`,
-    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://cors.eu.org/${u}`
   );
 
   for (const proxyFn of corsProxies) {
@@ -808,7 +808,16 @@ export async function fetchStreamsFromPlugin(
                 }
               }
 
-              // 4. If function takes an object parameter (fn.length <= 1) and nothing found yet, pass object
+              // 4. If still empty, try with title/query as first argument (essential for text-search scrapers like SkTonline)
+              if ((!Array.isArray(raw) || raw.length === 0) && title && title.trim()) {
+                try {
+                  raw = await getStreamsFn(title.trim(), targetType, season, episode);
+                } catch {
+                  // Ignore
+                }
+              }
+
+              // 5. If function takes an object parameter (fn.length <= 1) and nothing found yet, pass object
               if ((!Array.isArray(raw) || raw.length === 0) && getStreamsFn.length <= 1) {
                 try {
                   raw = await getStreamsFn({
@@ -820,7 +829,8 @@ export async function fetchStreamsFromPlugin(
                     season: season,
                     episode: episode,
                     title: title,
-                    name: title
+                    name: title,
+                    query: title
                   });
                 } catch {
                   // Ignore
