@@ -1,6 +1,5 @@
-// Universal Plugin & Addon Engine for BrowseIO
-// Supports Stremio Addons & Nuvio Executable JS Plugins with progressive loading & strict CORS fast-fail
 import * as cheerio from 'cheerio';
+import CryptoJS from 'crypto-js';
 
 export interface SubtitleTrack {
   id?: string;
@@ -410,8 +409,11 @@ const customRequire = (moduleName: string) => {
       parse: (str: string) => Object.fromEntries(new URLSearchParams(str))
     };
   }
-  if (mod === 'crypto' || mod === 'crypto-js') {
-    return typeof crypto !== 'undefined' ? crypto : {};
+  if (mod.includes('crypto-js') || mod === 'crypto_js' || mod === 'cryptojs') {
+    return CryptoJS;
+  }
+  if (mod === 'crypto') {
+    return typeof crypto !== 'undefined' ? crypto : CryptoJS;
   }
   return {};
 };
@@ -735,12 +737,14 @@ export async function fetchStreamsFromPlugin(
               console: { value: customConsole, writable: true, configurable: true },
               TMDB_API_KEY: { value: '4219e299c89411838049ab0dab19ebd5', writable: true, configurable: true },
               TMDB_KEY: { value: '4219e299c89411838049ab0dab19ebd5', writable: true, configurable: true },
+              CryptoJS: { value: CryptoJS, writable: true, configurable: true }
             }) as typeof globalThis & ScraperModuleExports;
 
             if (typeof window !== 'undefined') {
-              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown }).TMDB_API_KEY = '4219e299c89411838049ab0dab19ebd5';
-              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown }).TMDB_KEY = '4219e299c89411838049ab0dab19ebd5';
-              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown }).global = window;
+              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown; CryptoJS?: unknown }).TMDB_API_KEY = '4219e299c89411838049ab0dab19ebd5';
+              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown; CryptoJS?: unknown }).TMDB_KEY = '4219e299c89411838049ab0dab19ebd5';
+              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown; CryptoJS?: unknown }).global = window;
+              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown; CryptoJS?: unknown }).CryptoJS = CryptoJS;
             }
 
             const runner = new Function(
@@ -755,6 +759,7 @@ export async function fetchStreamsFromPlugin(
               'console',
               'TMDB_API_KEY',
               'TMDB_KEY',
+              'CryptoJS',
               code
             );
             runner(
@@ -768,7 +773,8 @@ export async function fetchStreamsFromPlugin(
               cheerio,
               customConsole,
               '4219e299c89411838049ab0dab19ebd5',
-              '4219e299c89411838049ab0dab19ebd5'
+              '4219e299c89411838049ab0dab19ebd5',
+              CryptoJS
             );
 
             const getStreamsFn = mod.exports.getStreams || (mod.exports as unknown as { default?: { getStreams?: unknown } })?.default?.getStreams || customGlobalThis.getStreams;

@@ -12,9 +12,11 @@
     "test": "node --experimental-strip-types scripts/run-e2e-tests.ts"
   },
   "dependencies": {
+    "@types/crypto-js": "^4.2.2",
     "@types/video.js": "^7.3.58",
     "artplayer": "^5.4.0",
     "cheerio": "^1.2.0",
+    "crypto-js": "^4.2.0",
     "hls.js": "^1.7.0",
     "next": "16.2.10",
     "react": "19.2.4",
