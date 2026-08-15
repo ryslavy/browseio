@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:pages": "rm -rf out && mv src/app/api src/app/_api_temp && (STATIC_EXPORT=true next build || (mv src/app/_api_temp src/app/api && exit 1)) && mv src/app/_api_temp src/app/api && touch out/.nojekyll",
+    "export": "npm run build:pages",
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-strip-types scripts/run-e2e-tests.ts"
