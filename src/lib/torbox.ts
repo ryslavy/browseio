@@ -38,16 +38,26 @@ export interface TorBoxTorrentItem {
 
 /**
  * Smart fetch for TorBox API:
- * Tries custom proxy first, then cors.eu.org, then direct fetch.
- * Passes Authorization: Bearer header.
+ * Injects token query parameter so proxies that strip the Authorization header still succeed.
+ * Tries custom proxy first, then direct fetch, then universal server proxy / public proxies.
  */
 async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Promise<Response> {
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string> || {})
   };
 
-  if (apiKey) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
+  const cleanKey = apiKey ? apiKey.trim() : '';
+
+  if (cleanKey) {
+    headers['Authorization'] = `Bearer ${cleanKey}`;
+  }
+
+  // Ensure token is present in the URL query string so ANY CORS proxy forwards it seamlessly
+  let targetUrl = url;
+  if (cleanKey && !targetUrl.includes('token=')) {
+    targetUrl = targetUrl.includes('?')
+      ? `${targetUrl}&token=${encodeURIComponent(cleanKey)}`
+      : `${targetUrl}?token=${encodeURIComponent(cleanKey)}`;
   }
 
   const customProxy = typeof window !== 'undefined' ? localStorage.getItem('custom_cors_proxy') : null;
@@ -56,13 +66,13 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
   // 1. Try Custom CORS proxy first if configured
   if (customProxy && customProxy.trim()) {
     const cp = customProxy.trim();
-    const proxiedUrl = cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(url)}` : `${cp}/${url}`;
+    const proxiedUrl = cp.endsWith('=') || cp.endsWith('?') ? `${cp}${encodeURIComponent(targetUrl)}` : `${cp}/${targetUrl}`;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
       const res = await fetch(proxiedUrl, { ...init, headers, signal: controller.signal });
       clearTimeout(timeoutId);
-      if (res.status < 500) return res;
+      if (res.ok) return res;
     } catch {
       // Fallback
     }
@@ -72,14 +82,14 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(url, { ...init, headers, signal: controller.signal });
+    const res = await fetch(targetUrl, { ...init, headers, signal: controller.signal });
     clearTimeout(timeoutId);
-    if (res.status < 500) return res;
+    if (res.ok) return res;
   } catch {
     // Fallback to proxy
   }
 
-  // 3. Local universal server proxy (for self-hosted or Node backend) & fallback public proxies
+  // 3. Local universal server proxy (for self-hosted / Vercel backend) & fallback public proxies
   const corsProxies: ((u: string) => string)[] = [];
   if (!isGithubPages) {
     corsProxies.push((u: string) => `/api/proxy?url=${encodeURIComponent(u)}`);
@@ -87,24 +97,25 @@ async function torboxFetch(url: string, init?: RequestInit, apiKey?: string): Pr
 
   corsProxies.push(
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u: string) => `https://cors.eu.org/${u}`,
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    (u: string) => `https://cors.eu.org/${u}`
   );
 
   for (const proxyFn of corsProxies) {
     try {
-      const proxiedUrl = proxyFn(url);
+      const proxiedUrl = proxyFn(targetUrl);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
       const res = await fetch(proxiedUrl, { ...init, headers, signal: controller.signal });
       clearTimeout(timeoutId);
-      if (res.status < 500) return res;
+      if (res.ok) return res;
     } catch {
       // Try next proxy
     }
   }
 
-  throw new Error(`TORBOX_FETCH_FAILED: ${url}`);
+  throw new Error(`TORBOX_FETCH_FAILED: ${targetUrl}`);
 }
 
 /**
@@ -127,9 +138,9 @@ export async function checkTorBoxCached(hashes: string[], apiKey?: string): Prom
 
   try {
     const hashList = cleanHashes.join(',');
-    const targetUrl = `${TORBOX_API_BASE}/torrents/checkcached?hash=${hashList}&format=object`;
+    const targetUrl = `${TORBOX_API_BASE}/torrents/checkcached?hash=${hashList}&format=object&token=${encodeURIComponent(apiKey.trim())}`;
 
-    const res = await torboxFetch(targetUrl, { method: 'GET' }, apiKey);
+    const res = await torboxFetch(targetUrl, { method: 'GET' }, apiKey.trim());
     const json: TorBoxCachedResponse = await res.json();
 
     if (json && json.data) {
@@ -183,7 +194,8 @@ export async function resolveTorBoxStreamUrl(
   episode?: number,
   fileIdx?: number
 ): Promise<string | null> {
-  if (!apiKey || !magnetOrHash || !magnetOrHash.trim()) return null;
+  const cleanKey = apiKey ? apiKey.trim() : '';
+  if (!cleanKey || !magnetOrHash || !magnetOrHash.trim()) return null;
   const normHash = normalizeInfoHash(magnetOrHash);
   if (!magnetOrHash.startsWith('magnet:') && !normHash) return null;
 
@@ -197,13 +209,14 @@ export async function resolveTorBoxStreamUrl(
     bodyData.append('magnet', magnet);
     bodyData.append('seed', '1');
     bodyData.append('allow_zip', 'false');
+    bodyData.append('token', cleanKey);
 
-    const createUrl = `${TORBOX_API_BASE}/torrents/createtorrent`;
+    const createUrl = `${TORBOX_API_BASE}/torrents/createtorrent?token=${encodeURIComponent(cleanKey)}`;
     const createRes = await torboxFetch(createUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: bodyData
-    }, apiKey);
+    }, cleanKey);
 
     const createJson = await createRes.json();
     let torrentId = createJson?.data?.torrent_id || createJson?.data?.id || (typeof createJson?.data === 'number' || typeof createJson?.data === 'string' ? createJson.data : null);
@@ -211,8 +224,8 @@ export async function resolveTorBoxStreamUrl(
     // If createtorrent failed or torrent already exists, lookup in user's mylist by hash
     if (!torrentId && normHash) {
       try {
-        const listUrl = `${TORBOX_API_BASE}/torrents/mylist`;
-        const listRes = await torboxFetch(listUrl, { method: 'GET' }, apiKey);
+        const listUrl = `${TORBOX_API_BASE}/torrents/mylist?token=${encodeURIComponent(cleanKey)}`;
+        const listRes = await torboxFetch(listUrl, { method: 'GET' }, cleanKey);
         const listJson = await listRes.json();
         if (listJson.success && Array.isArray(listJson.data)) {
           const matchedTorrent = listJson.data.find((t: { hash?: string; id?: string | number }) => t.hash && t.hash.toLowerCase() === normHash.toLowerCase());
@@ -315,7 +328,8 @@ export async function resolveTorBoxStreamUrl(
  * Universally adds a torrent or magnet link to user's TorBox account via POST createtorrent.
  */
 export async function cacheTorBoxTorrent(magnetOrHash: string, apiKey: string): Promise<{ success: boolean; message: string }> {
-  if (!apiKey) return { success: false, message: 'Chybí TorBox API klíč' };
+  const cleanKey = apiKey ? apiKey.trim() : '';
+  if (!cleanKey) return { success: false, message: 'Chybí TorBox API klíč' };
 
   let magnetUrl = magnetOrHash;
   if (!magnetUrl.startsWith('magnet:')) {
@@ -328,8 +342,9 @@ export async function cacheTorBoxTorrent(magnetOrHash: string, apiKey: string): 
     bodyData.append('magnet', magnetUrl);
     bodyData.append('seed', '1');
     bodyData.append('allow_zip', 'false');
+    bodyData.append('token', cleanKey);
 
-    const targetUrl = `${TORBOX_API_BASE}/torrents/createtorrent`;
+    const targetUrl = `${TORBOX_API_BASE}/torrents/createtorrent?token=${encodeURIComponent(cleanKey)}`;
 
     const res = await torboxFetch(targetUrl, {
       method: 'POST',
@@ -337,7 +352,7 @@ export async function cacheTorBoxTorrent(magnetOrHash: string, apiKey: string): 
         'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: bodyData
-    }, apiKey);
+    }, cleanKey);
 
     const json = await res.json();
     if (json.success) {
