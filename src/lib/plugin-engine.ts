@@ -374,7 +374,45 @@ export function savePlugins(plugins: PluginManifest[]): void {
  * Polyfilled require helper for browser execution of Nuvio scrapers.
  */
 const customRequire = (moduleName: string) => {
-  if (moduleName && moduleName.includes('cheerio')) return cheerio;
+  const mod = moduleName ? moduleName.toLowerCase() : '';
+  if (mod.includes('cheerio')) {
+    return (cheerio as unknown as { load?: unknown }).load ? cheerio : ((cheerio as unknown as { default?: unknown }).default || cheerio);
+  }
+  if (mod === 'buffer') {
+    return { Buffer: typeof Buffer !== 'undefined' ? Buffer : undefined };
+  }
+  if (mod === 'url') {
+    return {
+      URL: typeof URL !== 'undefined' ? URL : undefined,
+      parse: (u: string) => {
+        try {
+          const parsed = new URL(u);
+          return {
+            protocol: parsed.protocol,
+            host: parsed.host,
+            hostname: parsed.hostname,
+            port: parsed.port,
+            pathname: parsed.pathname,
+            search: parsed.search,
+            query: parsed.search.replace(/^\?/, ''),
+            hash: parsed.hash,
+            href: parsed.href
+          };
+        } catch {
+          return { href: u };
+        }
+      }
+    };
+  }
+  if (mod === 'querystring' || mod === 'qs') {
+    return {
+      stringify: (obj: Record<string, unknown>) => new URLSearchParams(obj as Record<string, string>).toString(),
+      parse: (str: string) => Object.fromEntries(new URLSearchParams(str))
+    };
+  }
+  if (mod === 'crypto' || mod === 'crypto-js') {
+    return typeof crypto !== 'undefined' ? crypto : {};
+  }
   return {};
 };
 
@@ -651,6 +689,26 @@ export async function fetchStreamsFromPlugin(
 
       const results: StreamSource[] = [];
 
+      // Resolve both numeric TMDB ID and IMDb ID for maximum scraper compatibility
+      let numericTmdbId: string | null = /^\d+$/.test(id) ? id : null;
+      const imdbId: string | null = id.startsWith('tt') ? id : null;
+
+      if (!numericTmdbId && imdbId) {
+        try {
+          const findRes = await corsFetch(`https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id&api_key=4219e299c89411838049ab0dab19ebd5`);
+          if (findRes.ok) {
+            const findData = await findRes.json();
+            if (findData.movie_results && findData.movie_results.length > 0) {
+              numericTmdbId = String(findData.movie_results[0].id);
+            } else if (findData.tv_results && findData.tv_results.length > 0) {
+              numericTmdbId = String(findData.tv_results[0].id);
+            }
+          }
+        } catch {
+          // Ignore
+        }
+      }
+
       await Promise.allSettled(
         scrapers.map(async scraper => {
           if (scraper.enabled === false) return;
@@ -719,20 +777,31 @@ export async function fetchStreamsFromPlugin(
               const targetType = type === 'series' ? 'tv' : 'movie';
               let raw: StremioRawStream[] | null = null;
 
-              // 1. Try standard positional arguments first (id, targetType, season, episode, title)
-              try {
-                raw = await getStreamsFn(id, targetType, season, episode, title);
-              } catch {
-                // Ignore
+              // 1. Try with numeric TMDB ID first (if resolved)
+              if (numericTmdbId) {
+                try {
+                  raw = await getStreamsFn(numericTmdbId, targetType, season, episode, title);
+                } catch {
+                  // Ignore
+                }
               }
 
-              // 2. If empty, try object parameter signature
+              // 2. If empty and IMDb ID exists (or different from numericTmdbId), try with IMDb ID
+              if ((!Array.isArray(raw) || raw.length === 0) && (imdbId || id)) {
+                try {
+                  raw = await getStreamsFn(imdbId || id, targetType, season, episode, title);
+                } catch {
+                  // Ignore
+                }
+              }
+
+              // 3. If empty, try object parameter signature with all IDs
               if (!Array.isArray(raw) || raw.length === 0) {
                 try {
                   raw = await getStreamsFn({
-                    tmdbId: id,
-                    id: id,
-                    imdbId: id,
+                    tmdbId: numericTmdbId || id,
+                    id: numericTmdbId || id,
+                    imdbId: imdbId || id,
                     type: targetType,
                     mediaType: targetType,
                     season: season,
@@ -745,10 +814,10 @@ export async function fetchStreamsFromPlugin(
                 }
               }
 
-              // 3. If still empty and title exists, try passing title as first argument
+              // 4. If still empty and title exists, try passing title as first argument
               if ((!Array.isArray(raw) || raw.length === 0) && title) {
                 try {
-                  raw = await getStreamsFn(title, targetType, season, episode, id);
+                  raw = await getStreamsFn(title, targetType, season, episode, numericTmdbId || id);
                 } catch {
                   // Ignore
                 }
