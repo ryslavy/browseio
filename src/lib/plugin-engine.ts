@@ -621,7 +621,7 @@ export async function installPluginFromUrl(urlInput: string): Promise<PluginMani
 
 interface ScraperModuleExports {
   getStreams?: (
-    paramOrId: string | { tmdbId?: string; id?: string; type?: string; mediaType?: string; season?: number; episode?: number; title?: string },
+    paramOrId: string | { tmdbId?: string; id?: string; imdbId?: string; name?: string; type?: string; mediaType?: string; season?: number; episode?: number; title?: string; [key: string]: unknown },
     targetType?: string,
     season?: number,
     episode?: number,
@@ -689,29 +689,38 @@ export async function fetchStreamsFromPlugin(
               const targetType = type === 'series' ? 'tv' : 'movie';
               let raw: StremioRawStream[] | null = null;
 
-              if (getStreamsFn.length > 1) {
-                try {
-                  raw = await getStreamsFn(id, targetType, season, episode, title);
-                } catch {
-                  // Ignore
-                }
-              } else {
+              // 1. Try standard positional arguments first (id, targetType, season, episode, title)
+              try {
+                raw = await getStreamsFn(id, targetType, season, episode, title);
+              } catch {
+                // Ignore
+              }
+
+              // 2. If empty, try object parameter signature
+              if (!Array.isArray(raw) || raw.length === 0) {
                 try {
                   raw = await getStreamsFn({
                     tmdbId: id,
                     id: id,
+                    imdbId: id,
                     type: targetType,
                     mediaType: targetType,
                     season: season,
                     episode: episode,
-                    title: title
+                    title: title,
+                    name: title
                   });
                 } catch {
-                  try {
-                    raw = await getStreamsFn(id, targetType, season, episode, title);
-                  } catch {
-                    // Ignore
-                  }
+                  // Ignore
+                }
+              }
+
+              // 3. If still empty and title exists, try passing title as first argument
+              if ((!Array.isArray(raw) || raw.length === 0) && title) {
+                try {
+                  raw = await getStreamsFn(title, targetType, season, episode, id);
+                } catch {
+                  // Ignore
                 }
               }
 
