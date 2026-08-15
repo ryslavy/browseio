@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:"$Sreact.suspense"
+3:I[29213,["/browseio/_next/static/chunks/29ig-i_2z48wb.js","/browseio/_next/static/chunks/1xj9_v8h4rlmx.js","/browseio/_next/static/chunks/1ax99kwgl73x_.js","/browseio/_next/static/chunks/355pu8cfyqz23.js","/browseio/_next/static/chunks/11m1ttg2m_l--.js"],"default"]
+4:I[97367,["/browseio/_next/static/chunks/29ig-i_2z48wb.js","/browseio/_next/static/chunks/1xj9_v8h4rlmx.js"],"OutletBoundary"]
+0:{"rsc":["$","$1","c",{"children":[["$","$2",null,{"fallback":["$","div",null,{"style":{"display":"flex","justifyContent":"center","padding":"4rem"},"children":["$","div",null,{"className":"spinner"}]}],"children":["$","$L3",null,{}]}],[["$","script","script-0",{"src":"/browseio/_next/static/chunks/1ax99kwgl73x_.js","async":true}],["$","script","script-1",{"src":"/browseio/_next/static/chunks/355pu8cfyqz23.js","async":true}],["$","script","script-2",{"src":"/browseio/_next/static/chunks/11m1ttg2m_l--.js","async":true}]],["$","$L4",null,{"children":["$","$2",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"PfTrsU9nZ94VvGzvf5DZz"}
+5:null
