@@ -675,13 +675,45 @@ export async function fetchStreamsFromPlugin(
               cheerio: { value: cheerio, writable: true, configurable: true },
               require: { value: customRequire, writable: true, configurable: true },
               console: { value: customConsole, writable: true, configurable: true },
-              TMDB_API_KEY: { value: '4219e299c89411838049ab0dab19ebd5', writable: true, configurable: true }
+              TMDB_API_KEY: { value: '4219e299c89411838049ab0dab19ebd5', writable: true, configurable: true },
+              TMDB_KEY: { value: '4219e299c89411838049ab0dab19ebd5', writable: true, configurable: true },
             }) as typeof globalThis & ScraperModuleExports;
 
-            const runner = new Function('module', 'exports', 'globalThis', 'fetch', 'require', 'cheerio', 'console', code);
-            runner(mod, mod.exports, customGlobalThis, corsFetch, customRequire, cheerio, customConsole);
+            if (typeof window !== 'undefined') {
+              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown }).TMDB_API_KEY = '4219e299c89411838049ab0dab19ebd5';
+              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown }).TMDB_KEY = '4219e299c89411838049ab0dab19ebd5';
+              (window as unknown as { TMDB_API_KEY?: string; TMDB_KEY?: string; global?: unknown }).global = window;
+            }
 
-            const getStreamsFn = mod.exports.getStreams || customGlobalThis.getStreams;
+            const runner = new Function(
+              'module',
+              'exports',
+              'globalThis',
+              'global',
+              'window',
+              'fetch',
+              'require',
+              'cheerio',
+              'console',
+              'TMDB_API_KEY',
+              'TMDB_KEY',
+              code
+            );
+            runner(
+              mod,
+              mod.exports,
+              customGlobalThis,
+              customGlobalThis,
+              customGlobalThis,
+              corsFetch,
+              customRequire,
+              cheerio,
+              customConsole,
+              '4219e299c89411838049ab0dab19ebd5',
+              '4219e299c89411838049ab0dab19ebd5'
+            );
+
+            const getStreamsFn = mod.exports.getStreams || (mod.exports as unknown as { default?: { getStreams?: unknown } })?.default?.getStreams || customGlobalThis.getStreams;
 
             if (typeof getStreamsFn === 'function') {
               const targetType = type === 'series' ? 'tv' : 'movie';
