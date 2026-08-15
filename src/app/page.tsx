@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { getCatalog, searchCinemeta, MetaItem } from '@/lib/cinemeta';
 import { filterCatalogItems, sortCatalogItems, SortMode } from '@/lib/catalog-sorter';
 import { CatalogHeader } from '@/components/catalog/CatalogHeader';
@@ -63,14 +63,42 @@ const SERIES_GENRES = [
 function CatalogContent() {
   const { t } = useI18n();
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
 
-  // URL State derivation
-  const typeParam = (searchParams.get('type') === 'series' ? 'series' : 'movie') as 'movie' | 'series';
-  const genreParam = searchParams.get('genre') || 'top';
-  const sortParam = (searchParams.get('sort') as SortMode) || 'popularity';
-  const qParam = searchParams.get('q') || '';
+  // Helper to parse URL params cleanly from window or Next.js searchParams
+  const getSearchParams = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search);
+    }
+    return new URLSearchParams(searchParams ? searchParams.toString() : '');
+  }, [searchParams]);
+
+  const initialSp = getSearchParams();
+  const [mediaType, setMediaType] = useState<'movie' | 'series'>(() => 
+    (initialSp.get('type') === 'series' ? 'series' : 'movie') as 'movie' | 'series'
+  );
+  const [currentGenre, setCurrentGenre] = useState<string>(() => initialSp.get('genre') || 'top');
+  const [currentSort, setCurrentSort] = useState<SortMode>(() => (initialSp.get('sort') as SortMode) || 'popularity');
+  const [searchQuery, setSearchQuery] = useState<string>(() => initialSp.get('q') || '');
+
+  // Synchronize internal state when searchParams or popstate changes (e.g. from Back/Forward or Navbar links)
+  useEffect(() => {
+    const handleUrlSync = () => {
+      const sp = getSearchParams();
+      const nextType = (sp.get('type') === 'series' ? 'series' : 'movie') as 'movie' | 'series';
+      const nextGenre = sp.get('genre') || 'top';
+      const nextSort = (sp.get('sort') as SortMode) || 'popularity';
+      const nextQ = sp.get('q') || '';
+
+      setMediaType(nextType);
+      setCurrentGenre(nextGenre);
+      setCurrentSort(nextSort);
+      setSearchQuery(nextQ);
+    };
+
+    handleUrlSync();
+    window.addEventListener('popstate', handleUrlSync);
+    return () => window.removeEventListener('popstate', handleUrlSync);
+  }, [searchParams, getSearchParams]);
 
   const [rawMovies, setRawMovies] = useState<MetaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,38 +108,52 @@ function CatalogContent() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const fetchReqId = useRef(0);
 
-  // URL state synchronization helper
+  // URL state synchronization helper (safe for GitHub Pages with basePath and Vercel)
   const updateUrlParams = useCallback(
-    (updates: Record<string, string | undefined>) => {
-      const params = new URLSearchParams(searchParams.toString());
-      
-      // Always guarantee catalog view and current media type
-      params.set('view', 'catalog');
-      if (!params.has('type')) {
-        params.set('type', typeParam);
-      }
+    (updates: { type?: 'movie' | 'series'; genre?: string; sort?: SortMode; q?: string }) => {
+      const nextType = updates.type !== undefined ? updates.type : mediaType;
+      const nextGenre = updates.genre !== undefined ? updates.genre : (updates.type !== undefined ? 'top' : currentGenre);
+      const nextSort = updates.sort !== undefined ? updates.sort : currentSort;
+      const nextQ = updates.q !== undefined ? updates.q : searchQuery;
 
-      Object.entries(updates).forEach(([key, val]) => {
-        if (
-          val === undefined ||
-          val === '' ||
-          (key === 'genre' && val === 'top') ||
-          (key === 'sort' && val === 'popularity')
-        ) {
-          params.delete(key);
+      setMediaType(nextType);
+      setCurrentGenre(nextGenre);
+      setCurrentSort(nextSort);
+      setSearchQuery(nextQ);
+
+      if (typeof window !== 'undefined') {
+        const sp = new URLSearchParams(window.location.search);
+        sp.set('view', 'catalog');
+        sp.set('type', nextType);
+
+        if (nextGenre && nextGenre !== 'top') {
+          sp.set('genre', nextGenre);
         } else {
-          params.set(key, val);
+          sp.delete('genre');
         }
-      });
 
-      const query = params.toString();
-      const newUrl = query ? `${pathname}?${query}` : pathname;
-      router.replace(newUrl);
+        if (nextSort && nextSort !== 'popularity') {
+          sp.set('sort', nextSort);
+        } else {
+          sp.delete('sort');
+        }
+
+        if (nextQ && nextQ.trim()) {
+          sp.set('q', nextQ.trim());
+        } else {
+          sp.delete('q');
+        }
+
+        const currentPath = window.location.pathname;
+        const qs = sp.toString();
+        const newUrl = qs ? `${currentPath}?${qs}` : currentPath;
+        window.history.replaceState(null, '', newUrl);
+      }
     },
-    [searchParams, router, pathname, typeParam]
+    [mediaType, currentGenre, currentSort, searchQuery]
   );
 
-  const currentGenres = typeParam === 'movie' ? MOVIE_GENRES : SERIES_GENRES;
+  const currentGenres = mediaType === 'movie' ? MOVIE_GENRES : SERIES_GENRES;
 
   // Primary Data Fetching Effect with Candidate Pool Pre-fetching
   useEffect(() => {
@@ -123,8 +165,8 @@ function CatalogContent() {
       setHasMore(true);
 
       // Case 1: Search query active
-      if (qParam.trim()) {
-        const results = await searchCinemeta(qParam.trim(), typeParam);
+      if (searchQuery.trim()) {
+        const results = await searchCinemeta(searchQuery.trim(), mediaType);
         if (!isCancelled && reqId === fetchReqId.current) {
           setRawMovies(results);
           setHasMore(false);
@@ -134,14 +176,14 @@ function CatalogContent() {
       }
 
       // Case 2: Custom sorting active -> Pre-fetch candidate pool up to 50 items
-      if (sortParam !== 'popularity') {
+      if (currentSort !== 'popularity') {
         let pool: MetaItem[] = [];
         const existingIds = new Set<string>();
         let currentSkip = 0;
         let canFetchMore = true;
 
         while (pool.length < 50 && canFetchMore && !isCancelled) {
-          const batch = await getCatalog(typeParam, genreParam, currentSkip);
+          const batch = await getCatalog(mediaType, currentGenre, currentSkip);
           if (isCancelled || reqId !== fetchReqId.current) return;
 
           if (!batch || batch.length === 0) {
@@ -173,7 +215,7 @@ function CatalogContent() {
       }
 
       // Case 3: Default popularity sorting -> Load initial 1 page
-      const initialBatch = await getCatalog(typeParam, genreParam, 0);
+      const initialBatch = await getCatalog(mediaType, currentGenre, 0);
       if (!isCancelled && reqId === fetchReqId.current) {
         setRawMovies(initialBatch);
         setHasMore(initialBatch.length >= 10);
@@ -186,15 +228,15 @@ function CatalogContent() {
     return () => {
       isCancelled = true;
     };
-  }, [typeParam, genreParam, qParam, sortParam]);
+  }, [mediaType, currentGenre, searchQuery, currentSort]);
 
   // Infinite Scroll Pagination Handler
   const loadMore = useCallback(async () => {
-    if (loading || loadingMore || !hasMore || qParam) return;
+    if (loading || loadingMore || !hasMore || searchQuery) return;
     setLoadingMore(true);
 
     const nextSkip = rawMovies.length;
-    const batch = await getCatalog(typeParam, genreParam, nextSkip);
+    const batch = await getCatalog(mediaType, currentGenre, nextSkip);
 
     if (!batch || batch.length === 0) {
       setHasMore(false);
@@ -212,7 +254,7 @@ function CatalogContent() {
     });
 
     setLoadingMore(false);
-  }, [loading, loadingMore, hasMore, qParam, rawMovies.length, typeParam, genreParam]);
+  }, [loading, loadingMore, hasMore, searchQuery, rawMovies.length, mediaType, currentGenre]);
 
   // Intersection Observer setup for Infinite Scroll
   useEffect(() => {
@@ -221,7 +263,7 @@ function CatalogContent() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loading && !loadingMore && hasMore && !qParam) {
+        if (entries[0].isIntersecting && !loading && !loadingMore && hasMore && !searchQuery) {
           loadMore();
         }
       },
@@ -231,21 +273,21 @@ function CatalogContent() {
     observer.observe(sentinel);
 
     return () => observer.disconnect();
-  }, [loading, loadingMore, hasMore, qParam, loadMore]);
+  }, [loading, loadingMore, hasMore, searchQuery, loadMore]);
 
   // Derived Filtered & Sorted Movie List
   const displayedMovies = useMemo(() => {
     const filtered = filterCatalogItems(rawMovies, {
-      type: typeParam,
-      genre: qParam ? undefined : genreParam,
+      type: mediaType,
+      genre: searchQuery ? undefined : currentGenre,
       searchQuery: undefined,
     });
-    return sortCatalogItems(filtered, sortParam);
-  }, [rawMovies, typeParam, genreParam, qParam, sortParam]);
+    return sortCatalogItems(filtered, currentSort);
+  }, [rawMovies, mediaType, currentGenre, searchQuery, currentSort]);
 
   // UI Change Handlers
   const handleTypeChange = (newType: 'movie' | 'series') => {
-    updateUrlParams({ type: newType, genre: undefined });
+    updateUrlParams({ type: newType, genre: 'top' });
   };
 
   const handleGenreChange = (newGenre: string) => {
@@ -260,18 +302,18 @@ function CatalogContent() {
     updateUrlParams({ q: newQuery });
   };
 
-  const headerTitle = qParam
-    ? (loading ? `${t('catalog.searching')} "${qParam}"...` : `${t('catalog.search_results')} "${qParam}"`)
-    : `${genreParam === 'top' ? t('catalog.popular') : (t(`genre.${genreParam}`) || genreParam)} ${typeParam === 'movie' ? t('catalog.movies').toLowerCase() : t('catalog.series').toLowerCase()}`;
+  const headerTitle = searchQuery
+    ? (loading ? `${t('catalog.searching')} "${searchQuery}"...` : `${t('catalog.search_results')} "${searchQuery}"`)
+    : `${currentGenre === 'top' ? t('catalog.popular') : (t(`genre.${currentGenre}`) || currentGenre)} ${mediaType === 'movie' ? t('catalog.movies').toLowerCase() : t('catalog.series').toLowerCase()}`;
 
   return (
     <div className="fade-in">
-      <CatalogHeader type={typeParam} onTypeChange={handleTypeChange} />
+      <CatalogHeader type={mediaType} onTypeChange={handleTypeChange} />
 
       <FilterBar
-        currentGenre={genreParam}
+        currentGenre={currentGenre}
         genres={currentGenres}
-        searchQuery={qParam}
+        searchQuery={searchQuery}
         onGenreChange={handleGenreChange}
         onSearchSubmit={handleSearchSubmit}
         loading={loading}
@@ -288,14 +330,14 @@ function CatalogContent() {
         }}
       >
         <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {loading && qParam && <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>}
+          {loading && searchQuery && <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>}
           {headerTitle}
         </h2>
 
-        <SortDropdown currentSort={sortParam} onSortChange={handleSortChange} />
+        <SortDropdown currentSort={currentSort} onSortChange={handleSortChange} />
       </div>
 
-      <MovieGrid movies={displayedMovies} defaultType={typeParam} loading={loading} />
+      <MovieGrid movies={displayedMovies} defaultType={mediaType} loading={loading} />
 
       <div
         ref={sentinelRef}
@@ -322,8 +364,8 @@ function useCurrentView() {
     function updateView() {
       if (typeof window === 'undefined') return;
 
-      const path = pathname || window.location.pathname;
-      const search = searchParams ? searchParams.toString() : window.location.search;
+      const path = typeof window !== 'undefined' ? window.location.pathname : (pathname || '/');
+      const search = typeof window !== 'undefined' ? window.location.search : (searchParams ? searchParams.toString() : '');
       const hash = typeof window !== 'undefined' ? window.location.hash : '';
       const sp = new URLSearchParams(search);
 
