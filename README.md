@@ -7,24 +7,27 @@
 ## ✨ Features
 
 - 🎨 **Modern Glassmorphism UI**: High-end visual aesthetics with responsive layouts, fluid micro-animations, dynamic backdrop effects, and dark mode.
-- 🔌 **Extensible Plugin Engine**: Flexible client-side plugin framework supporting standard community manifests (Stremio & Nuvio compatible).
-- 🚀 **100% Client-Side & Static Export**: Designed to be compiled into static HTML/JS assets (`next build`) ready to host directly on **GitHub Pages**, **Cloudflare Pages**, or any CDN without needing a backend server.
-- ☁️ **Cloud Debrid & Stream Resolution**: Integrated support for cloud media management (such as TorBox API) to cache and stream high-speed content directly.
-- 📺 **Flexible Playback Options**:
-  - NATIVE Web Player with HLS/HTML5 video support.
-  - One-click launcher for external desktop players (**PotPlayer**, **VLC**, **MPV**, **Infuse**).
-- 🌐 **Multilingual (i18n)**: Built-in internationalization supporting Czech, English, and easily expandable dictionary files.
-- ⚙️ **Custom CORS Proxying**: Smart client-side fetch router with automatic proxy fallbacks for seamless browser network requests.
+- 🔌 **Extensible Plugin Engine**: Flexible client-side plugin framework supporting standard community manifests (**Stremio Addons** & **Nuvio Scrapers / Plugins**).
+- 🚀 **100% Client-Side & Static Export**: Designed to be compiled into static HTML/JS assets (`npm run build:pages`) ready to host directly on **GitHub Pages**, **Cloudflare Pages**, or any static CDN without requiring a backend server.
+- ☁️ **Cloud Debrid & Stream Resolution**: Integrated support for cloud media management (such as **TorBox API**) with instant cache status checking, direct streaming, manual caching, and file downloading.
+- 📺 **Advanced Artplayer Web Player**:
+  - Full support for direct HTTP/HLS (`.m3u8`) streaming with adaptive bitrate switching.
+  - In-player subtitle management with automatic subtitle detection, custom `.srt` / `.vtt` file upload, font size adjustments (16px–40px), vertical height positioning (30px–160px), and time delay synchronization.
+  - Audio track selection and pure TypeScript container probing (EBML/MKV header analysis for audio codecs and multi-audio tracks).
+  - Dedicated in-player stream switcher drawer for quick quality and provider switching without leaving playback.
+- 🍿 **Desktop Player Integration**: One-click external protocol launcher for desktop media players (**PotPlayer**, **VLC**, **MPV**, **Infuse**).
+- 🌐 **Multilingual & Localization (i18n)**: Full internationalization supporting **Czech** and **English**, plus user-defined custom translation overrides via JSON.
+- ⚙️ **Universal CORS Proxying**: Smart client-side fetch router with automatic proxy fallbacks (includes a deployable Cloudflare Worker in `cors-proxy/`) for seamless browser network requests.
 
 ---
 
 ## 🛠️ Technology Stack
 
-- **Framework**: Next.js 16 (App Router, Turbopack)
-- **UI & Logic**: React 19, TypeScript
-- **Styling**: Modern Vanilla CSS (Design Tokens, Glassmorphism, CSS Variables)
-- **Video Player**: Video.js / Native HTML5 Video API
-- **Deployment**: Static Site Generation (SSG / GitHub Pages)
+- **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack)
+- **UI & Logic**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: Modern Vanilla CSS (Design Tokens, Glassmorphism, CSS Variables, Responsive Layouts)
+- **Video Player**: [Artplayer](https://artplayer.org/) & [Hls.js](https://github.com/video-dev/hls.js/)
+- **Deployment**: Static Site Generation (SSG / GitHub Pages export)
 
 ---
 
@@ -52,28 +55,57 @@
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) in your browser to view the application.
+   Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 📦 Building & Static Deployment
+## 🧪 Testing & Linting
 
-To build and export the application as a static website for **GitHub Pages**:
+BrowseIO includes a built-in end-to-end and unit test suite verifying plugin normalization, stream deduplication, subtitle conversion, container probing, and translation maps:
+
+```bash
+# Run the test suite
+npm test
+
+# Run ESLint
+npm run lint
+
+# Run TypeScript type check
+npx tsc --noEmit
+```
+
+---
+
+## 📦 Building & GitHub Pages Deployment
+
+BrowseIO supports both a hybrid Next.js build and a static export for static web hosting:
+
+### 1. Static Export (GitHub Pages)
+To compile the static bundle for **GitHub Pages** (exported into the `out/` folder):
+
+```bash
+npm run build:pages
+```
+
+The output in `out/` is ready to be deployed to the `gh-pages` branch.
+
+### 2. Standard Production Build
+For Node.js / Vercel server environments:
 
 ```bash
 npm run build
+npm start
 ```
-
-The compiled static assets will be generated inside the `out/` directory. You can host this directory on any web server or use the built-in GitHub Actions workflow.
 
 ---
 
 ## 🔌 Plugin Engine
 
 BrowseIO allows users to connect custom media source providers dynamically:
+
 1. Navigate to **Nastavení (Settings)** in the web application.
-2. Enter a valid Manifest URL (Stremio/Nuvio spec).
-3. BrowseIO automatically parses stream capabilities (Web Streams vs. Cloud Cached Streams) and displays appropriate playback options for each source.
+2. Enter a valid Manifest URL (Stremio Addon or Nuvio Plugin manifest).
+3. BrowseIO automatically resolves stream capabilities (Direct Web Streams, Debrid Cached Streams, and P2P Torrents) and presents optimal playback options for each source.
 
 ---
 
